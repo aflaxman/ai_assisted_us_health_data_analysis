@@ -2,6 +2,9 @@
 data/derived/
 data/nhis/
 
+# Jupyter
+.ipynb_checkpoints/
+
 # Python
 __pycache__/
 *.pyc
