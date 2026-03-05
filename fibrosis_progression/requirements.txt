@@ -1,6 +1,7 @@
 numpy
 pandas
 pyarrow
+pyreadstat
 matplotlib
 seaborn
 scipy
