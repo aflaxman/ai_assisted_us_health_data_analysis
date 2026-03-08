@@ -38,6 +38,7 @@ I would like to keep the environments easy to create and isolated, and able to:
 - Use `uv` for Python package management
 - Commit messages include the Claude Code attribution footer
 - **Quickstart sections**: Should be simple and direct - choose ONE recommended path, not multiple options. Don't force users to make decisions in quickstart; save alternatives for detailed instructions.
+- **Line plots with error bars**: Always include error bars (confidence intervals or range) on line plots. Use `ax.errorbar()` with `capsize=3` for point estimates with CIs, or `ax.fill_between()` for continuous bands. Never plot point estimates without showing uncertainty.
 
 ## Technical Blog Post Guidelines
 
