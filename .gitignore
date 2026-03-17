@@ -9,3 +9,4 @@ data/derived/
 
 # Large raw data files (downloaded by notebooks)
 data/raw/nsduh/
+data/raw/acs_pums/
