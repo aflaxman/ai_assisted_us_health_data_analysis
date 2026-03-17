@@ -23,6 +23,7 @@ For data analysis projects (e.g., `nhanes_mortality_fibrosis/`):
 5. **`requirements.txt`** in the project subdirectory; set up with `uv venv && uv pip install -r requirements.txt`
 6. **Launch Jupyter from the project directory** — notebooks use `os.path.join('..', 'data')` for shared data
 7. **`.gitignore`** — root gitignore handles `data/derived/` and `data/nhis/`; project gitignore handles `.ipynb_checkpoints/`
+8. **Executed notebooks** — commit notebooks with cell outputs included, so readers can see results without re-running. After executing notebooks (e.g., via `jupyter nbconvert --execute`), commit the executed `.ipynb` files.
 
 ## Environment
 
