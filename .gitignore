@@ -10,3 +10,9 @@ data/derived/
 # Large raw data files (downloaded by notebooks)
 data/raw/nsduh/
 data/raw/acs_pums/
+data/raw/fped/
+
+# Large NHANES dietary files (downloaded by notebooks)
+data/raw/nhanes/**/*IFF*.xpt
+data/raw/nhanes/**/*FCD*.xpt
+data/raw/nhanes/**/*FMT*.xpt
