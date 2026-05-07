@@ -1,0 +1,5 @@
+Measure,Our_est,Our_95CI,Abstract_est,Abstract_95CI
+Persons with EE > 0 (M),59.60,(57.88–61.33),59.6,(57.3–61.9)
+Total annual EE ($B),21.82,(21.01–22.64),21.56,(20.80–22.19)
+Mean EE per capita ($),66.61,(64.73–68.48),66.61,(64.26–68.95)
+Mean EE per spender ($),366.15,(358.31–373.99),N/A,(ambiguous; see discrepancies.md)
