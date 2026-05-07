@@ -1,0 +1,29 @@
+project_pair_key,risk_a,risk_b,rho_value_space,rho_propensity,flipped,n,source
+high_body_mass_index_in_adults_AND_high_fasting_plasma_glucose,BMI,FPG,0.29,0.29,False,3696,continuous NHANES 2007-18
+high_body_mass_index_in_adults_AND_high_ldl_cholesterol,BMI,LDL_C,-0.08,-0.08,False,3572,continuous NHANES 2007-18
+high_body_mass_index_in_adults_AND_high_systolic_blood_pressure,BMI,SBP,-0.038,-0.038,False,7545,continuous NHANES 2007-18
+high_body_mass_index_in_adults_AND_kidney_dysfunction,BMI,kidney_dysfunction,0.046,-0.046,True,7306,continuous NHANES 2007-18
+high_body_mass_index_in_adults_AND_lipoprotein_a,lipoprotein_a,BMI,-0.071,-0.071,False,1454,NHANES III Phase II 1991-94
+high_body_mass_index_in_adults_AND_liver_stiffness,liver_stiffness,BMI,0.213,0.213,False,1752,NHANES P_LUX 2017-Mar 2020
+high_body_mass_index_in_adults_AND_smoking,BMI,smoking,0.02,-0.02,True,7811,continuous NHANES 2007-18
+high_fasting_plasma_glucose_AND_high_ldl_cholesterol,LDL_C,FPG,-0.199,-0.199,False,3643,continuous NHANES 2007-18
+high_fasting_plasma_glucose_AND_high_systolic_blood_pressure,SBP,FPG,0.105,0.105,False,3643,continuous NHANES 2007-18
+high_fasting_plasma_glucose_AND_kidney_dysfunction,FPG,kidney_dysfunction,0.037,-0.037,True,3711,continuous NHANES 2007-18
+high_fasting_plasma_glucose_AND_lipoprotein_a,lipoprotein_a,FPG,-0.122,-0.122,False,521,NHANES III Phase II 1991-94
+high_fasting_plasma_glucose_AND_liver_stiffness,liver_stiffness,FPG,0.228,0.228,False,842,NHANES P_LUX 2017-Mar 2020
+high_fasting_plasma_glucose_AND_smoking,FPG,smoking,0.066,-0.066,True,3773,continuous NHANES 2007-18
+high_ldl_cholesterol_AND_high_systolic_blood_pressure,LDL_C,SBP,0.056,0.056,False,3519,continuous NHANES 2007-18
+high_ldl_cholesterol_AND_kidney_dysfunction,LDL_C,kidney_dysfunction,-0.085,0.085,True,3630,continuous NHANES 2007-18
+high_ldl_cholesterol_AND_lipoprotein_a,lipoprotein_a,LDL_C,0.145,0.145,False,601,NHANES III Phase II 1991-94
+high_ldl_cholesterol_AND_liver_stiffness,liver_stiffness,LDL_C,-0.226,-0.226,False,826,NHANES P_LUX 2017-Mar 2020
+high_ldl_cholesterol_AND_smoking,LDL_C,smoking,-0.123,0.123,True,3645,continuous NHANES 2007-18
+high_systolic_blood_pressure_AND_kidney_dysfunction,SBP,kidney_dysfunction,0.047,-0.047,True,7215,continuous NHANES 2007-18
+high_systolic_blood_pressure_AND_lipoprotein_a,lipoprotein_a,SBP,0.058,0.058,False,1455,NHANES III Phase II 1991-94
+high_systolic_blood_pressure_AND_liver_stiffness,liver_stiffness,SBP,0.032,0.032,False,1608,NHANES P_LUX 2017-Mar 2020
+high_systolic_blood_pressure_AND_smoking,SBP,smoking,-0.043,0.043,True,7711,continuous NHANES 2007-18
+kidney_dysfunction_AND_lipoprotein_a,lipoprotein_a,kidney_dysfunction,0.032,-0.032,True,1444,NHANES III Phase II 1991-94
+kidney_dysfunction_AND_liver_stiffness,liver_stiffness,kidney_dysfunction,0.098,-0.098,True,1650,NHANES P_LUX 2017-Mar 2020
+kidney_dysfunction_AND_smoking,smoking,kidney_dysfunction,-0.064,-0.064,False,7472,continuous NHANES 2007-18
+lipoprotein_a_AND_liver_stiffness,lipoprotein_a,liver_stiffness,0.0,0.0,False,0,literature (no NHANES overlap)
+lipoprotein_a_AND_smoking,lipoprotein_a,smoking,-0.039,0.039,True,1458,NHANES III Phase II 1991-94
+liver_stiffness_AND_smoking,liver_stiffness,smoking,0.01,-0.01,True,1787,NHANES P_LUX 2017-Mar 2020

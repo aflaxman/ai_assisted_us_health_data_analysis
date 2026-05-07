@@ -1,0 +1,29 @@
+pair,risk_a,risk_b,n,rho,se,lo,hi,source
+BMI ↔ LDL_C,BMI,LDL_C,3572,-0.08,0.031,-0.141,-0.019,continuous NHANES 2007-18
+BMI ↔ SBP,BMI,SBP,7545,-0.038,0.024,-0.085,0.009,continuous NHANES 2007-18
+BMI ↔ FPG,BMI,FPG,3696,0.29,0.028,0.234,0.345,continuous NHANES 2007-18
+BMI ↔ smoking,BMI,smoking,7811,0.02,0.022,-0.023,0.063,continuous NHANES 2007-18
+BMI ↔ kidney_dysfunction,BMI,kidney_dysfunction,7306,0.046,0.022,0.003,0.089,continuous NHANES 2007-18
+LDL_C ↔ SBP,LDL_C,SBP,3519,0.056,0.033,-0.008,0.121,continuous NHANES 2007-18
+LDL_C ↔ FPG,LDL_C,FPG,3643,-0.199,0.041,-0.278,-0.119,continuous NHANES 2007-18
+LDL_C ↔ smoking,LDL_C,smoking,3645,-0.123,0.03,-0.182,-0.064,continuous NHANES 2007-18
+LDL_C ↔ kidney_dysfunction,LDL_C,kidney_dysfunction,3630,-0.085,0.039,-0.161,-0.009,continuous NHANES 2007-18
+SBP ↔ FPG,SBP,FPG,3643,0.105,0.029,0.048,0.162,continuous NHANES 2007-18
+SBP ↔ smoking,SBP,smoking,7711,-0.043,0.022,-0.086,-0.0,continuous NHANES 2007-18
+SBP ↔ kidney_dysfunction,SBP,kidney_dysfunction,7215,0.047,0.025,-0.003,0.097,continuous NHANES 2007-18
+FPG ↔ smoking,FPG,smoking,3773,0.066,0.028,0.012,0.121,continuous NHANES 2007-18
+FPG ↔ kidney_dysfunction,FPG,kidney_dysfunction,3711,0.037,0.034,-0.029,0.103,continuous NHANES 2007-18
+smoking ↔ kidney_dysfunction,smoking,kidney_dysfunction,7472,-0.064,0.026,-0.115,-0.012,continuous NHANES 2007-18
+lipoprotein_a ↔ BMI,lipoprotein_a,BMI,1454,-0.071,0.012,-0.095,-0.047,NHANES III Phase II 1991-94
+lipoprotein_a ↔ LDL_C,lipoprotein_a,LDL_C,601,0.145,0.019,0.107,0.182,NHANES III Phase II 1991-94
+lipoprotein_a ↔ SBP,lipoprotein_a,SBP,1455,0.058,0.013,0.033,0.084,NHANES III Phase II 1991-94
+lipoprotein_a ↔ FPG,lipoprotein_a,FPG,521,-0.122,0.016,-0.154,-0.09,NHANES III Phase II 1991-94
+lipoprotein_a ↔ smoking,lipoprotein_a,smoking,1458,-0.039,0.008,-0.054,-0.023,NHANES III Phase II 1991-94
+lipoprotein_a ↔ kidney_dysfunction,lipoprotein_a,kidney_dysfunction,1444,0.032,0.013,0.005,0.058,NHANES III Phase II 1991-94
+liver_stiffness ↔ BMI,liver_stiffness,BMI,1752,0.213,0.055,0.106,0.321,NHANES P_LUX 2017-Mar 2020
+liver_stiffness ↔ LDL_C,liver_stiffness,LDL_C,826,-0.226,0.067,-0.357,-0.096,NHANES P_LUX 2017-Mar 2020
+liver_stiffness ↔ SBP,liver_stiffness,SBP,1608,0.032,0.053,-0.072,0.135,NHANES P_LUX 2017-Mar 2020
+liver_stiffness ↔ FPG,liver_stiffness,FPG,842,0.228,0.067,0.097,0.359,NHANES P_LUX 2017-Mar 2020
+liver_stiffness ↔ smoking,liver_stiffness,smoking,1787,0.01,0.054,-0.096,0.116,NHANES P_LUX 2017-Mar 2020
+liver_stiffness ↔ kidney_dysfunction,liver_stiffness,kidney_dysfunction,1650,0.098,0.048,0.005,0.191,NHANES P_LUX 2017-Mar 2020
+lipoprotein_a ↔ liver_stiffness,lipoprotein_a,liver_stiffness,0,0.0,,,,literature (no NHANES overlap)
