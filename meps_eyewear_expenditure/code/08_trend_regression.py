@@ -4,9 +4,9 @@ Temporal trend analysis: MEPS annual eyewear expenditures vs BEA HCSA (FRED).
 Regressions:
   1. FRED total ($B) ~ year           (2002–2021, log-linear OLS)
   2. MEPS total ($B) ~ year           (2002–2022, log-linear OLS; all years)
-  3. MEPS pre-redesign  ~ year        (2002–2016)
-  4. MEPS post-redesign ~ year        (2017–2022)
-  5. MEPS per-capita    ~ year        (full series)
+  3. MEPS pre-2017   ~ year           (2002–2016)
+  4. MEPS post-2017  ~ year           (2017–2022)
+  5. MEPS per-capita ~ year           (full series)
 
 All regressions use log(y) ~ year so the slope is an annual growth rate.
 Heteroscedasticity-consistent (HC3) standard errors throughout.
@@ -90,9 +90,9 @@ regs = {
         log_linear_reg(BEA[BEA['year'] >= 2002], 'total_b', label='FRED (BEA HCSA)'),
     'MEPS total, all years (2002–2022)':
         log_linear_reg(MEPS, 'total_b', label='MEPS (all years)'),
-    'MEPS total, pre-redesign (2002–2016)':
+    'MEPS total, pre-2017 (2002–2016)':
         log_linear_reg(MEPS[MEPS['year'] <= 2016], 'total_b', label='MEPS pre-2017'),
-    'MEPS total, post-redesign (2017–2022)':
+    'MEPS total, post-2017 (2017–2022)':
         log_linear_reg(MEPS[MEPS['year'] >= 2017], 'total_b', label='MEPS 2017+'),
     'FRED per-capita (2002–2021)':
         log_linear_reg(BEA[BEA['year'] >= 2002], 'percap', label='FRED per-capita'),
@@ -138,18 +138,18 @@ ax1.plot(r_fred['yr_pred'], r_fred['y_pred'], '--', color=BEA_COLOR,
          lw=1.5, alpha=0.7,
          label=f"FRED trend: {r_fred['slope_pct']:+.1f}%/yr (R²={r_fred['r2']:.2f})")
 
-r_pre  = regs['MEPS total, pre-redesign (2002–2016)']
+r_pre  = regs['MEPS total, pre-2017 (2002–2016)']
 ax1.plot(r_pre['yr_pred'], r_pre['y_pred'], '--', color='#F5A623',
          lw=1.5, alpha=0.8,
          label=f"MEPS 2002–2016: {r_pre['slope_pct']:+.1f}%/yr (R²={r_pre['r2']:.2f})")
 
-r_post = regs['MEPS total, post-redesign (2017–2022)']
+r_post = regs['MEPS total, post-2017 (2017–2022)']
 ax1.plot(r_post['yr_pred'], r_post['y_pred'], '--', color=MEPS_POST,
          lw=1.5, alpha=0.8,
          label=f"MEPS 2017–2022: {r_post['slope_pct']:+.1f}%/yr (R²={r_post['r2']:.2f})")
 
 ax1.axvline(2016.5, color='gray', lw=1, ls=':', alpha=0.7)
-ax1.text(2016.7, 12, 'MEPS redesign\n(2017)', fontsize=7.5, color='gray', va='bottom')
+ax1.text(2016.7, 12, 'Level shift\n(2017)', fontsize=7.5, color='gray', va='bottom')
 ax1.set_xlabel('Year')
 ax1.set_ylabel('Total eyewear expenditures ($B, nominal)')
 ax1.set_title('Total US Eyewear Expenditures: MEPS vs BEA HCSA (FRED)', fontsize=11)
@@ -182,8 +182,8 @@ ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'${x:.0f}'))
 labels_bar = ['FRED\n(2002–21)', 'MEPS\n(2002–22)', 'MEPS pre\n(2002–16)',
               'MEPS post\n(2017–22)']
 reg_keys   = ['FRED total (2002–2021)', 'MEPS total, all years (2002–2022)',
-              'MEPS total, pre-redesign (2002–2016)',
-              'MEPS total, post-redesign (2017–2022)']
+              'MEPS total, pre-2017 (2002–2016)',
+              'MEPS total, post-2017 (2017–2022)']
 slopes  = [regs[k]['slope_pct']  for k in reg_keys]
 lo_errs = [regs[k]['slope_pct'] - regs[k]['slope_lo'] for k in reg_keys]
 hi_errs = [regs[k]['slope_hi']  - regs[k]['slope_pct'] for k in reg_keys]
@@ -247,9 +247,13 @@ for r in reg_rows:
     )
 md_lines += [
     '',
-    '**Note on MEPS structural break:** MEPS was redesigned in 2017 (new sampling frame,',
-    'ACS-based selection replacing NHIS-based). The per-year total jumps from ~$16B (2016)',
-    'to ~$18B (2017) and ~$24B (2018). Separate pre/post regressions isolate each era.',
+    '**Note on MEPS level shift around 2017:** The per-year total jumps from ~$16B (2016)',
+    'to ~$18B (2017) and ~$24B (2018). MEPS-HC sampling has remained an NHIS subsample',
+    'throughout (confirmed through HC-251, 2023 data); the cause of the level shift is',
+    'unknown from the data alone — candidates include real spending growth driven by',
+    'low-cost online retailers, changes in MEPS imputation or weighting, or NHIS',
+    'redesign effects propagating through the MEPS subsample. Pre/post regressions',
+    'isolate each era without asserting a cause.',
 ]
 
 md_path = os.path.join(RES, 'trend_regressions.md')

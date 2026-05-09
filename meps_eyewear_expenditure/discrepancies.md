@@ -4,6 +4,29 @@ Two of our logistic regression ORs fall outside the abstract's 95% CIs. Notes be
 
 ---
 
+## Correction: MEPS sampling frame
+
+An earlier version of this analysis incorrectly stated that MEPS switched from
+NHIS-based to ACS-based sampling around 2017. This was wrong.
+
+Per the HC-251 (2023 Full Year Consolidated) documentation released August 2025,
+MEPS-HC continues to be drawn as a subsample of the prior year's NHIS:
+
+> "The set of households selected for each panel of the MEPS HC is a subsample of
+> households participating in the previous year's National Health Interview Survey
+> (NHIS) … The NHIS sampling frame provides a nationally representative sample of
+> the U.S. civilian noninstitutionalized population."
+
+The ~$7–8B level shift visible in MEPS between 2016 ($15.8B) and 2018 ($23.7B)
+therefore has an unknown cause. Candidates include real spending growth (expansion
+of low-cost online eyewear retailers, Warby Parker, Zenni, etc.), changes in NHIS
+design or response rates that affect the MEPS subsample, or methodological changes
+in MEPS imputation or calibration weighting. The pre/post trend regressions in
+`code/08_trend_regression.py` split at 2017 to isolate each era empirically
+without asserting a cause.
+
+---
+
 ## 1. Age 65+ aOR: ours 1.23 (1.17–1.29) vs abstract 1.47 (1.34–1.60)
 
 **Direction:** Both > 1 (older adults more likely to have EE). Ours is substantially lower.
