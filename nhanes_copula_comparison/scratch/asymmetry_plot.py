@@ -1,0 +1,15 @@
+"""Plot asymmetric tail dependence: marginal vs partial."""
+import numpy as np, pandas as pd, matplotlib.pyplot as plt
+df = pd.read_parquet('outputs/partial_tail_asymmetry.parquet')
+fig, ax = plt.subplots(figsize=(8, 4))
+y = np.arange(len(df))
+ax.barh(y - 0.20, df['asym_marg'], 0.36, label='marginal', color='C3')
+ax.barh(y + 0.20, df['asym_part'], 0.36, label='partial (after age/sex/race)', color='C0')
+ax.axvline(0, color='black', linewidth=0.6)
+ax.set_yticks(y); ax.set_yticklabels(df['pair'])
+ax.set_xlabel('upper-tail χ(0.90) − lower-tail χ(0.10)  (asymmetry)')
+ax.set_title('Tail asymmetry shrinks after partialling out age, sex, race', fontsize=10)
+ax.legend(fontsize=9, frameon=False)
+plt.tight_layout()
+plt.savefig('outputs/asymmetry_partial.png', dpi=120, bbox_inches='tight')
+print('wrote outputs/asymmetry_partial.png')
