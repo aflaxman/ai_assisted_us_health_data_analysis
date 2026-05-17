@@ -4,8 +4,8 @@ Temporal trend analysis: MEPS annual eyewear expenditures vs BEA HCSA (FRED).
 Regressions:
   1. FRED total ($B) ~ year           (2002–2021, log-linear OLS)
   2. MEPS total ($B) ~ year           (2002–2022, log-linear OLS; all years)
-  3. MEPS pre-2017   ~ year           (2002–2016)
-  4. MEPS post-2017  ~ year           (2017–2022)
+  3. MEPS pre-2018   ~ year           (2002–2017)
+  4. MEPS post-2018  ~ year           (2018–2022)
   5. MEPS per-capita ~ year           (full series)
 
 All regressions use log(y) ~ year so the slope is an annual growth rate.
@@ -90,10 +90,10 @@ regs = {
         log_linear_reg(BEA[BEA['year'] >= 2002], 'total_b', label='FRED (BEA HCSA)'),
     'MEPS total, all years (2002–2022)':
         log_linear_reg(MEPS, 'total_b', label='MEPS (all years)'),
-    'MEPS total, pre-2017 (2002–2016)':
-        log_linear_reg(MEPS[MEPS['year'] <= 2016], 'total_b', label='MEPS pre-2017'),
-    'MEPS total, post-2017 (2017–2022)':
-        log_linear_reg(MEPS[MEPS['year'] >= 2017], 'total_b', label='MEPS 2017+'),
+    'MEPS total, pre-2018 (2002–2017)':
+        log_linear_reg(MEPS[MEPS['year'] <= 2017], 'total_b', label='MEPS pre-2018'),
+    'MEPS total, post-2018 (2018–2022)':
+        log_linear_reg(MEPS[MEPS['year'] >= 2018], 'total_b', label='MEPS 2018+'),
     'FRED per-capita (2002–2021)':
         log_linear_reg(BEA[BEA['year'] >= 2002], 'percap', label='FRED per-capita'),
     'MEPS per-capita, all years (2002–2022)':
@@ -138,18 +138,18 @@ ax1.plot(r_fred['yr_pred'], r_fred['y_pred'], '--', color=BEA_COLOR,
          lw=1.5, alpha=0.7,
          label=f"FRED trend: {r_fred['slope_pct']:+.1f}%/yr (R²={r_fred['r2']:.2f})")
 
-r_pre  = regs['MEPS total, pre-2017 (2002–2016)']
+r_pre  = regs['MEPS total, pre-2018 (2002–2017)']
 ax1.plot(r_pre['yr_pred'], r_pre['y_pred'], '--', color='#F5A623',
          lw=1.5, alpha=0.8,
-         label=f"MEPS 2002–2016: {r_pre['slope_pct']:+.1f}%/yr (R²={r_pre['r2']:.2f})")
+         label=f"MEPS 2002–2017: {r_pre['slope_pct']:+.1f}%/yr (R²={r_pre['r2']:.2f})")
 
-r_post = regs['MEPS total, post-2017 (2017–2022)']
+r_post = regs['MEPS total, post-2018 (2018–2022)']
 ax1.plot(r_post['yr_pred'], r_post['y_pred'], '--', color=MEPS_POST,
          lw=1.5, alpha=0.8,
-         label=f"MEPS 2017–2022: {r_post['slope_pct']:+.1f}%/yr (R²={r_post['r2']:.2f})")
+         label=f"MEPS 2018–2022: {r_post['slope_pct']:+.1f}%/yr (R²={r_post['r2']:.2f})")
 
-ax1.axvline(2016.5, color='gray', lw=1, ls=':', alpha=0.7)
-ax1.text(2016.7, 12, 'Level shift\n(2017)', fontsize=7.5, color='gray', va='bottom')
+ax1.axvline(2017.5, color='gray', lw=1, ls=':', alpha=0.7)
+ax1.text(2017.7, 12, 'Level shift\n(2018)', fontsize=7.5, color='gray', va='bottom')
 ax1.set_xlabel('Year')
 ax1.set_ylabel('Total eyewear expenditures ($B, nominal)')
 ax1.set_title('Total US Eyewear Expenditures: MEPS vs BEA HCSA (FRED)', fontsize=11)
@@ -171,7 +171,7 @@ ax2.plot(r_bpc['yr_pred'], r_bpc['y_pred'], '--', color=BEA_COLOR, lw=1.2, alpha
 r_mpc = regs['MEPS per-capita, all years (2002–2022)']
 ax2.plot(r_mpc['yr_pred'], r_mpc['y_pred'], '--', color=MEPS_COLOR, lw=1.2, alpha=0.6,
          label=f"MEPS trend: {r_mpc['slope_pct']:+.1f}%/yr")
-ax2.axvline(2016.5, color='gray', lw=1, ls=':', alpha=0.7)
+ax2.axvline(2017.5, color='gray', lw=1, ls=':', alpha=0.7)
 ax2.set_xlabel('Year')
 ax2.set_ylabel('Per capita ($, nominal)')
 ax2.set_title('Per Capita Eyewear Expenditures')
@@ -179,11 +179,11 @@ ax2.legend(fontsize=7.5)
 ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f'${x:.0f}'))
 
 # — Panel 3: growth rate comparison bar chart ——————————————————————————————————
-labels_bar = ['FRED\n(2002–21)', 'MEPS\n(2002–22)', 'MEPS pre\n(2002–16)',
-              'MEPS post\n(2017–22)']
+labels_bar = ['FRED\n(2002–21)', 'MEPS\n(2002–22)', 'MEPS pre\n(2002–17)',
+              'MEPS post\n(2018–22)']
 reg_keys   = ['FRED total (2002–2021)', 'MEPS total, all years (2002–2022)',
-              'MEPS total, pre-2017 (2002–2016)',
-              'MEPS total, post-2017 (2017–2022)']
+              'MEPS total, pre-2018 (2002–2017)',
+              'MEPS total, post-2018 (2018–2022)']
 slopes  = [regs[k]['slope_pct']  for k in reg_keys]
 lo_errs = [regs[k]['slope_pct'] - regs[k]['slope_lo'] for k in reg_keys]
 hi_errs = [regs[k]['slope_hi']  - regs[k]['slope_pct'] for k in reg_keys]
@@ -247,13 +247,15 @@ for r in reg_rows:
     )
 md_lines += [
     '',
-    '**Note on MEPS level shift around 2017:** The per-year total jumps from ~$16B (2016)',
-    'to ~$18B (2017) and ~$24B (2018). MEPS-HC sampling has remained an NHIS subsample',
+    '**Note on MEPS level shift around 2018:** The per-year total jumps from ~$18B (2017)',
+    'to ~$24B (2018) and stays elevated. MEPS-HC sampling has remained an NHIS subsample',
     'throughout (confirmed through HC-251, 2023 data); the cause of the level shift is',
-    'unknown from the data alone — candidates include real spending growth driven by',
-    'low-cost online retailers, changes in MEPS imputation or weighting, or NHIS',
-    'redesign effects propagating through the MEPS subsample. Pre/post regressions',
-    'isolate each era without asserting a cause.',
+    'unknown from the data alone. The NHIS questionnaire was redesigned for the 2019',
+    'data year (instrument changes piloted from Spring 2018 in the MEPS field period),',
+    'and the NHIS sample design changed in 2016 with effects propagating to MEPS over',
+    'subsequent panels. Other candidates include real spending growth driven by low-cost',
+    'online retailers and changes in MEPS imputation or weighting. Pre/post regressions',
+    'split at 2018 to isolate each era without asserting a cause.',
 ]
 
 md_path = os.path.join(RES, 'trend_regressions.md')

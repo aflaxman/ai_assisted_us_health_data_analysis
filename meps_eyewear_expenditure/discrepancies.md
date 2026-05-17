@@ -17,13 +17,17 @@ MEPS-HC continues to be drawn as a subsample of the prior year's NHIS:
 > (NHIS) … The NHIS sampling frame provides a nationally representative sample of
 > the U.S. civilian noninstitutionalized population."
 
-The ~$7–8B level shift visible in MEPS between 2016 ($15.8B) and 2018 ($23.7B)
-therefore has an unknown cause. Candidates include real spending growth (expansion
-of low-cost online eyewear retailers, Warby Parker, Zenni, etc.), changes in NHIS
-design or response rates that affect the MEPS subsample, or methodological changes
-in MEPS imputation or calibration weighting. The pre/post trend regressions in
-`code/08_trend_regression.py` split at 2017 to isolate each era empirically
-without asserting a cause.
+The ~$6B level shift visible in MEPS between 2017 ($17.7B) and 2018 ($23.7B)
+therefore has an unknown cause. The largest single-year jump occurs between 2017
+and 2018, coincident with the Spring 2018 MEPS instrument changes (Panel 23 Round
+1, Panel 22 Round 3, Panel 21 Round 5) and predating the NHIS questionnaire
+redesign that took effect for the 2019 data year. The NHIS sample design also
+changed in 2016 (state-level allocation; minority oversampling discontinued), and
+those structural changes propagate to MEPS over subsequent panels. Other
+candidates include real spending growth (expansion of low-cost online retailers
+such as Warby Parker and Zenni) and changes in MEPS imputation or calibration
+weighting. The pre/post trend regressions in `code/08_trend_regression.py` split
+at 2018 to isolate each era empirically without asserting a cause.
 
 ---
 
