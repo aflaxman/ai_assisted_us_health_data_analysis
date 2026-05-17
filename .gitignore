@@ -10,3 +10,8 @@ __pycache__/
 # exam/adult/lab .dat); excluding the whole tree keeps the repo
 # pushable.
 data/
+data/derived/
+data/raw/meps/
+data/nhis/
+meps_eyewear_expenditure/.venv/
+meps_eyewear_expenditure/outputs/*.png
