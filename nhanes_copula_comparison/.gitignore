@@ -4,3 +4,4 @@ __pycache__/
 scratch/raw/
 outputs/nhanes_2017_2018_merged.parquet
 outputs/trial_band.parquet
+outputs/pooled_bmi_fpg_2007_2018.parquet
