@@ -18,16 +18,58 @@ MEPS-HC continues to be drawn as a subsample of the prior year's NHIS:
 > the U.S. civilian noninstitutionalized population."
 
 The ~$6B level shift visible in MEPS between 2017 ($17.7B) and 2018 ($23.7B)
-therefore has an unknown cause. The largest single-year jump occurs between 2017
-and 2018, coincident with the Spring 2018 MEPS instrument changes (Panel 23 Round
-1, Panel 22 Round 3, Panel 21 Round 5) and predating the NHIS questionnaire
-redesign that took effect for the 2019 data year. The NHIS sample design also
-changed in 2016 (state-level allocation; minority oversampling discontinued), and
-those structural changes propagate to MEPS over subsequent panels. Other
-candidates include real spending growth (expansion of low-cost online retailers
-such as Warby Parker and Zenni) and changes in MEPS imputation or calibration
-weighting. The pre/post trend regressions in `code/08_trend_regression.py` split
-at 2018 to isolate each era empirically without asserting a cause.
+is driven almost entirely by a jump in *prevalence* of eyewear spenders, not by
+the per-spender amount. The weighted share of persons with VISEXP > 0 rises from
+16.3% (2017) to 20.0% (2018) and then stays in the 17–19% range through 2022,
+while the mean among spenders drifts smoothly from $339 (2017) to $364 (2018) —
+no per-spender break.
+
+A direct comparison of the MEPS Other Medical Expenses (OM) CAPI sections for
+2017 (Nov 2017 specification; reflecting the harmonized 2016 design) and 2018
+(P21R5/P22R3/P23R1 specification; the first year of the Spring 2018 redesign)
+points to one specific instrument change as the most likely cause:
+
+**Pre-redesign (2017 PUF, harmonized to 2016 design):** the OM section had no
+direct purchase-screening question for eyewear. A respondent was routed into
+OM01A/OM01B only if an eyewear item type had already been identified upstream
+(through the Event Driver / EV20 chain — i.e., the purchase had to surface via
+some other event such as a medical visit). OM01A then asked:
+
+> "Of the times (PERSON) obtained glasses or contact lenses since (START DATE),
+> how many were during {YEAR}?"
+
+**Post-redesign (2018 PUF, OM item OM10, BLAISE name "Glasses"):** every
+household member is directly screened with a YES/NO question:
+
+> "Did {you/{PERSON}} purchase eyeglasses or contact lenses {since {START DATE}/
+> between {START DATE} and {END DATE}}?"
+
+If OM10 is coded YES, a new OM-record is created at BOX_30. Five additional
+direct YES/NO screens were added in the same redesign for other OM categories
+(home health care receiver, ambulance, disposable supplies, medical equipment,
+and a residual "other OM" item), but the eyeglasses/contacts screen is the
+relevant one here.
+
+This change converts eyewear capture from an *event-triggered* to a
+*direct-screened* design. The new design naturally identifies more eyewear
+purchasers — drugstore reading glasses, online contact-lens refills, glasses
+replaced without a new exam, and purchases the respondent simply did not think
+to mention while reporting medical visits would all be missed by the old
+event-driven flow and caught by the new direct prompt.
+
+The MEPS HC-201 (2017) documentation acknowledges the partial transition: for
+the Full-Year 2017 PUFs, "the Panel 22 Round 3 and Panel 21 Round 5 data were
+transformed to the degree possible to conform to the previous year (2016)
+design." 2018 is the first PUF that fully reflects the new instrument, which
+is exactly where the prevalence jump appears in the data.
+
+Auxiliary candidates (real online-retailer growth, NHIS 2016 sample-design
+effects propagating through later panels, MEPS imputation/calibration changes)
+remain plausible second-order contributors but cannot produce the specific
+fingerprint observed: a one-year ~3.7-pp jump in spender prevalence with no
+break in mean per-spender. The pre/post trend regressions in
+`code/08_trend_regression.py` split at 2018 to isolate the two instrument
+regimes empirically.
 
 ---
 
