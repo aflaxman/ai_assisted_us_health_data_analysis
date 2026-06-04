@@ -73,6 +73,36 @@ def mnar_sweep(d, strata, income, K, deltas):
     return sweep
 
 
+def gradient_and_se(d, method, K=24, income=None):
+    """Fit one model (A/B/C) and return (log_OR_per_doubling, SE_per_doubling, ok).
+
+    The SE is the model-based (observed-information) SE of the gradient — the correct
+    design SE when the sample is a simple random sample. ``ok`` flags a clean fit
+    (converged, finite SE, and a non-degenerate gradient — guards against separation
+    at very small n). Used by the small-sample experiment (notebook 06).
+    """
+    try:
+        if method == "A":
+            r = im.fit_A(d)
+            m = d.mask("bracket")
+            nodes, X, y, w = d.log_mid[m][:, None], d.X[m], d.y[m], d.w[m]
+        elif method == "B":
+            r = im.fit_B(d, K=K, income=income)
+            use, nodes = im.latent_nodes(d, r.income, K, two_mechanism=False)
+            X, y, w = d.X[use], d.y[use], d.w[use]
+        else:
+            r = im.fit_C(d, gamma=0.0, K=K, income=income)
+            use, nodes = im.latent_nodes(d, r.income, K, gamma=0.0, two_mechanism=True)
+            X, y, w = d.X[use], d.y[use], d.w[use]
+        J = im.marginal_information(r.outcome.params, X, y, w, nodes)
+        se = float(np.sqrt(np.linalg.inv(J)[0, 0]) * im.LN2)
+        lod = r.log_or_per_doubling
+        ok = bool(r.outcome.success and np.isfinite(se) and abs(lod) < 2.5)
+        return lod, se, ok
+    except Exception:
+        return np.nan, np.nan, False
+
+
 def bootstrap_confirm(d, strata, results, B, K_boot, seed=2023):
     """Warm-started stratified bootstrap of the gradient for A/B/C (confirmation)."""
     rA, rB, rC = results
