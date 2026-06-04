@@ -12,6 +12,8 @@ results for two outcomes. The pipeline runs in sequence:
 3. [`03_model_ABC.ipynb`](03_model_ABC.ipynb) — the A → B → C gradient comparison (frequent mental distress).
 4. [`04_missingness_sensitivity.ipynb`](04_missingness_sensitivity.ipynb) — the refusal-MNAR sweep (FMD).
 5. [`05_vision_difficulty.ipynb`](05_vision_difficulty.ipynb) — the same investigation for difficulty seeing.
+6. [`06_small_sample.ipynb`](06_small_sample.ipynb) — does the modeling matter more at small (state/county) sample sizes? A bias–variance + coverage study.
+7. [`07_income_nonresponse.ipynb`](07_income_nonresponse.ipynb) — who declines the income question, across eight survey years (2011–2023) and birth cohorts.
 
 See [`METHODS.md`](METHODS.md) for exact variables, bracket boundaries, codes, and references."""),
     md("""## The question
