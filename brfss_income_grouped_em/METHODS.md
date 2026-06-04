@@ -166,6 +166,39 @@ grouped-data likelihood), while the refused-vs-don't-know distinction — though
 in the demographics of who is missing — does not move the gradient unless one is
 willing to assume an implausibly strong, directional refusal mechanism.
 
+## Extensions (notebooks 06–07)
+
+**06 — does the modeling matter more at small (state/county) n?** A subsampling study
+on the vision outcome: simple random samples of size *n* = 300 … 25,000 (200 replicates
+each, unweighted, age+sex-adjusted to stay estimable), with the full-sample model-C
+gradient as the reference truth. The three estimators trace a **bias–variance
+tradeoff**. The midpoint (A) is biased toward the null (≈ +0.05 log-OR, roughly constant
+in *n*) but lowest-variance; B and C are ≈ unbiased but ~12–15% noisier. For point
+accuracy (RMSE) there is a **crossover near n ≈ 1,000–2,500** — below it A wins (its bias
+is swamped by sampling noise when vision cases are scarce), above it the grouped models
+win. For inference, A's 95% CI coverage **collapses from 0.95 to 0.36** as *n* grows
+(tight intervals centered on the biased value) while B/C hold ≈ 0.95 throughout. Reading
+for small-area work: at county scale the binding constraint is the case count, not the
+income model, so the midpoint costs little in RMSE there; but once samples are pooled or
+honest CIs matter, the grouped-data likelihood is the safe default. *Caveats:* unweighted
+SRS and age+sex adjustment only; reference truth = full-sample C.
+
+**07 — who declines the income question, across years and cohorts.** Pooling eight LLCP
+years (2011–2023; `INCOME2` 8-bracket through 2020, `INCOME3` 11-bracket from 2021;
+77/99 codes verified constant), conditioning on respondents asked the item. Refused (99)
+and don't-know (77) run in **opposite directions by education** (2023: refusal rises
+5.2% → 11.4% with education; don't-know falls 21.7% → 4.2%) — refusal reads as higher-SES
+privacy, don't-know as lower-SES uncertainty, so the published collapsed code averages two
+opposite gradients away. Weighted nonresponse **rose over time** (refusal 5.8% → 9.3%, DK
+8.0% → 10.6%), with a refusal jump at the **2021 instrument change** (a period/instrument
+confound for anyone splicing across 2020/2021). And the pattern **differs by birth
+cohort**: refusal declines from older to younger cohorts, don't-know is U-shaped (highest,
+~26%, among those born in the 2000s), and the education–refusal gap fades across cohorts
+(+5–6 pp for 1940s–60s births → +1 pp for 1990s). This is direct empirical support for
+keeping the two mechanisms distinct in model C. *Caveat:* age/period/cohort are not
+separately identified in repeated cross-sections — read the cohort contrasts alongside the
+age × year panel.
+
 ## Sources
 
 - BRFSS 2023 annual data: https://www.cdc.gov/brfss/annual_data/annual_2023.html
