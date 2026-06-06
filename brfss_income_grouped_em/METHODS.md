@@ -199,6 +199,23 @@ keeping the two mechanisms distinct in model C. *Caveat:* age/period/cohort are 
 separately identified in repeated cross-sections — read the cohort contrasts alongside the
 age × year panel.
 
+**08 — income nonresponse by employment status.** BRFSS public files carry **no
+occupation or industry code** (the NIOSH Industry & Occupation module is restricted; a
+scan of 2011–2023 confirms its absence), so the available labor-market / "class" axis is
+employment status (`EMPLOY1`, or `EMPLOY` in 2011). The same opposite-direction signature
+recurs: in 2023 refusal is highest among the **retired (15.1%)** and **self-employed
+(9.5%)** while don't-know is highest among **students (26.4%)**, the out-of-work (19.6%),
+those unable to work (19.2%), and homemakers (17.0%); employed-for-wages sit lowest and
+balanced (7.1% / 7.1%). The self-employed refuse about a third more than wage employees,
+a premium stable across 2011–2023 (ratio 1.15–1.34). Cross-stratifying education ×
+employment, the two axes **reinforce additively**: the college-vs-no-HS refusal gradient
+stays positive within every employment category (+5 to +9 pp, muted only among
+students/unable), and the self-employed premium holds within every education level,
+growing to +4.3 pp among college graduates — so the highest-refusal cells are the
+high-resource corners (college-educated self-employed, retired college graduates).
+*Caveat:* this is labor-market position, not occupation, and is confounded with age
+(retirement), health (unable to work), and income itself.
+
 ## Sources
 
 - BRFSS 2023 annual data: https://www.cdc.gov/brfss/annual_data/annual_2023.html
