@@ -92,6 +92,52 @@ for o in order:
 se_emp = gr.loc['Self-employed', 'p']; emp = gr.loc['Employed', 'p']
 print(f"\\nSelf-employed refuse income at {100*se_emp:.1f}% vs {100*emp:.1f}% for wage "
       f"employees in 2023 (ratio {se_emp/emp:.2f}x).")"""),
+    md("""## Cross-stratifying: education × employment status
+
+Education and employment are correlated but distinct social-class axes. Do they act
+*additively* — each gradient surviving inside the other — or is there an interaction
+(e.g. does the "educated refuse more" pattern reverse among the retired)? With 4 × 7 =
+28 cells per mechanism this can get messy, so we read it as two heatmaps (2023; cells
+with n < 200 left blank), then summarise whether each gradient persists within the
+other axis."""),
+    code("""educ_order = ['LtHS', 'HSgrad', 'SomeColl', 'CollGrad']
+emp_order = my.EMPLOY_ORDER
+d23 = df[(df['year'] == 2023) & df['educ'].notna() & df['employ'].notna()].copy()
+
+def grid(flag):
+    g = my.wprop(d23, flag, by=['educ', 'employ'])
+    P = g.pivot(index='educ', columns='employ', values='p').reindex(index=educ_order, columns=emp_order)
+    N = g.pivot(index='educ', columns='employ', values='n').reindex(index=educ_order, columns=emp_order)
+    M = np.array(100 * P, dtype=float)      # writable copy (to_numpy can be read-only)
+    M[N.to_numpy() < 200] = np.nan          # mask sparse cells
+    return M
+
+fig, axes = plt.subplots(1, 2, figsize=(15, 4.6))
+for flag, ax, ttl, cmap in [('refused', axes[0], 'Refused (99)', 'Reds'),
+                            ('dk', axes[1], "Don't know (77)", 'Blues')]:
+    M = grid(flag)
+    im = ax.imshow(M, cmap=cmap, aspect='auto', vmin=0)
+    ax.set_xticks(range(len(emp_order))); ax.set_xticklabels([nice[o] for o in emp_order], fontsize=8)
+    ax.set_yticks(range(len(educ_order))); ax.set_yticklabels(educ_order)
+    hi = np.nanmax(M)
+    for i in range(M.shape[0]):
+        for j in range(M.shape[1]):
+            if np.isfinite(M[i, j]):
+                ax.text(j, i, f"{M[i, j]:.0f}", ha='center', va='center', fontsize=8,
+                        color='white' if M[i, j] > 0.6 * hi else 'black')
+    ax.set_title(f'{ttl} (%), education × employment — 2023')
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02)
+plt.tight_layout(); plt.show()"""),
+    code("""# Does each gradient survive within the other axis?
+PR = my.wprop(d23, 'refused', by=['educ', 'employ']).pivot(index='educ', columns='employ', values='p') * 100
+print('Refusal: CollGrad - LtHS gap (pp) within each employment category:')
+for e in emp_order:
+    if e in PR.columns and np.isfinite(PR.loc['CollGrad', e]) and np.isfinite(PR.loc['LtHS', e]):
+        print(f'   {e:13s} {PR.loc["CollGrad", e] - PR.loc["LtHS", e]:+5.1f}')
+print('\\nRefusal: Self-employed - Employed gap (pp) within each education level:')
+for ed in educ_order:
+    if np.isfinite(PR.loc[ed, 'Self-employed']) and np.isfinite(PR.loc[ed, 'Employed']):
+        print(f'   {ed:9s} {PR.loc[ed, "Self-employed"] - PR.loc[ed, "Employed"]:+5.1f}')"""),
     md("""## Interpretation
 
 **The two mechanisms split along familiar lines — privacy vs uncertainty.** In 2023,
@@ -110,6 +156,18 @@ The self-employed refuse about a third more often than wage employees (9.5% vs 7
 (self-employed/employed refusal ratio 1.15–1.34 every year) even as the overall level of
 refusal climbed. Business owners consistently guard their income more than employees do
 — the clearest "class" signal the public file can give.
+
+**Education and employment reinforce, rather than cancel.** Cross-stratifying the two
+axes (the heatmaps above) shows they act largely additively. The education refusal
+gradient (college-grad minus no-HS) stays positive within *every* employment category —
++5 to +9 points among the employed, self-employed, homemakers, and retired, muted to
++2–3 only among students and the unable-to-work, where don't-know dominates. And the
+self-employed refusal premium holds within *every* education level, growing from +1–3
+points to +4.3 among college graduates. So the highest-refusal corners are the
+high-resource combinations — a college-educated self-employed person, or a retired
+college graduate — while don't-know stays concentrated among the young, dependent, and
+out-of-work regardless of education. The two class axes stack rather than interact
+perversely.
 
 **Read it as labor-market position, not occupation — and mind the confounds.** BRFSS
 carries no occupation code, so employment status is the available proxy, and it is
