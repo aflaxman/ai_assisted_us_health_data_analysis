@@ -14,6 +14,7 @@ results for two outcomes. The pipeline runs in sequence:
 5. [`05_vision_difficulty.ipynb`](05_vision_difficulty.ipynb) — the same investigation for difficulty seeing.
 6. [`06_small_sample.ipynb`](06_small_sample.ipynb) — does the modeling matter more at small (state/county) sample sizes? A bias–variance + coverage study.
 7. [`07_income_nonresponse.ipynb`](07_income_nonresponse.ipynb) — who declines the income question, across eight survey years (2011–2023) and birth cohorts.
+8. [`08_employment_nonresponse.ipynb`](08_employment_nonresponse.ipynb) — income nonresponse by employment status (the available labor-market axis; BRFSS has no occupation code).
 
 See [`METHODS.md`](METHODS.md) for exact variables, bracket boundaries, codes, and references."""),
     md("""## The question

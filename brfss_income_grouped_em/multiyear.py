@@ -23,6 +23,13 @@ AGEG5YR_MID = {1: 21, 2: 27, 3: 32, 4: 37, 5: 42, 6: 47, 7: 52, 8: 57,
                9: 62, 10: 67, 11: 72, 12: 77, 13: 82}
 EDUC_LABELS = {1: "LtHS", 2: "HSgrad", 3: "SomeColl", 4: "CollGrad"}
 
+# EMPLOY / EMPLOY1 employment status (the available labor-market / "class" axis;
+# BRFSS public files carry no occupation or industry code). 9/BLANK -> missing.
+EMPLOY_LABELS = {1: "Employed", 2: "Self-employed", 3: "OutOfWork", 4: "OutOfWork",
+                 5: "Homemaker", 6: "Student", 7: "Retired", 8: "Unable"}
+EMPLOY_ORDER = ["Employed", "Self-employed", "OutOfWork", "Homemaker",
+                "Student", "Retired", "Unable"]
+
 
 def _xpt_path(raw_dir, year):
     d = os.path.join(raw_dir, str(year))
@@ -50,15 +57,18 @@ def load_year(raw_dir, year):
     cols = set(meta.column_names)
     inc = "INCOME3" if "INCOME3" in cols else ("INCOME2" if "INCOME2" in cols else None)
     wt = "_LLCPWT" if "_LLCPWT" in cols else ("_FINALWT" if "_FINALWT" in cols else None)
+    emp = "EMPLOY1" if "EMPLOY1" in cols else ("EMPLOY" if "EMPLOY" in cols else None)
     if inc is None or wt is None:
         raise RuntimeError(f"{year}: income var={inc}, weight={wt}, cols missing")
-    use = [c for c in [inc, "_EDUCAG", "_AGEG5YR", wt] if c in cols]
+    use = [c for c in [inc, "_EDUCAG", "_AGEG5YR", emp, wt] if c and c in cols]
     df, _ = _read_xport(xpt, usecols=use)
     df = df.rename(columns={inc: "INCOME", wt: "WT"})
 
     income = pd.to_numeric(df["INCOME"], errors="coerce")
     educ = pd.to_numeric(df["_EDUCAG"], errors="coerce")
     ageg = pd.to_numeric(df["_AGEG5YR"], errors="coerce")
+    employ = (pd.to_numeric(df[emp], errors="coerce").map(EMPLOY_LABELS)
+              if emp else pd.Series(np.nan, index=df.index))
     out = pd.DataFrame({
         "year": year,
         "income_var": inc,
@@ -67,6 +77,7 @@ def load_year(raw_dir, year):
         "dk": (income == INCOME_DK).astype(float),
         "income_asked": income.notna().to_numpy(),   # blank = not asked
         "educ": educ.map(EDUC_LABELS),
+        "employ": employ.to_numpy(),
         "age_mid": ageg.map(AGEG5YR_MID),
     })
     out["birth_year"] = year - out["age_mid"]
