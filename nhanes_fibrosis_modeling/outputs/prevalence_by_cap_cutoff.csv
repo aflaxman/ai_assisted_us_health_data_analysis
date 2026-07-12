@@ -1,0 +1,10 @@
+,CAP≥0 (no gate),248 Karlas (mixed) ≥S1 any,263 clinical set S1 mild,268 Karlas (mixed) ≥S2 mod,280 Karlas (mixed) ≥S3 sev,288 clinical / baseline S2 mod,302 de Ledinghen/Eddowes (NAFLD) ≥S1 any,330 clinical set S3 sev
+No MASLD (no steatosis),0.0,43.6,51.5,53.8,61.3,65.9,72.7,84.1
+Steatosis (any MASLD),100.0,56.4,48.5,46.2,38.7,34.1,27.3,15.9
+MASLD F0,72.5,36.1,30.1,28.3,22.4,19.0,14.2,7.0
+MASLD F1,18.3,12.5,11.2,10.8,9.5,8.7,7.3,4.8
+MASLD F2,4.2,3.5,3.1,3.0,2.9,2.6,2.4,1.5
+MASLD F3,3.2,2.7,2.7,2.6,2.4,2.4,2.1,1.6
+MASLD F4,1.8,1.6,1.6,1.6,1.5,1.4,1.3,1.0
+MASLD F2+ (significant),9.2,7.8,7.3,7.2,6.8,6.4,5.8,4.1
+MASLD F3+ (advanced),5.0,4.3,4.2,4.1,3.9,3.8,3.4,2.6
