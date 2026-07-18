@@ -1,218 +1,141 @@
-"""Build 05_extend_to_skeleton.ipynb: read the per-(sex, age band)
-F4-calibrated lognormal table from notebook 04 and extend it with
-placeholder rows so it covers every (sex, age_start) cell in the
-GBD demographic skeleton — that's what the consuming simulation
-project's loader requires (it is strict; no fallback).
+"""Build 05_extend_to_skeleton.ipynb: extend BOTH the LSM and CAP per-cell tables
+with placeholder rows so each covers every (sex, age_start) in the GBD demographic
+skeleton, which the consuming simulation's strict loader requires. Sub-60 rows are
+forward-filled from each sex's youngest fitted band (60-64); fitted ages 60+
+(including the open-ended 80+ terminal band) come from notebook 04 unchanged.
 """
-import json
 from pathlib import Path
 
+from _nbtools import md, code, write_notebook
+
 HERE = Path(__file__).parent
-
-
-def md(source: str, cell_id: str) -> dict:
-    return {
-        "cell_type": "markdown",
-        "id": cell_id,
-        "metadata": {},
-        "source": source.splitlines(keepends=True),
-    }
-
-
-def code(source: str, cell_id: str) -> dict:
-    return {
-        "cell_type": "code",
-        "id": cell_id,
-        "execution_count": None,
-        "metadata": {},
-        "outputs": [],
-        "source": source.splitlines(keepends=True),
-    }
-
-
-CELLS: list[dict] = []
-
+CELLS = []
 
 CELLS.append(md(
     """\
-# 05 — Extend LSM lookup to the full demographic skeleton
+# 05 - Extend LSM + CAP lookups to the full demographic skeleton
 
-Notebook 04 fit F4-calibrated lognormals for adults 60+ — the only
-ages where NHANES P_LUX has enough elastography data to anchor a
-per-cell (mean, SD). The consuming simulation project's loader is
-strict: it requires a row for every (sex, age_start) in the GBD
-demographic skeleton (ages 0 through 95+), since stub fallbacks
-were removed at the close of Model 4.
+Notebook 04 fit per-(sex, 5-year band) distributions for adults **60+** -- the
+ages where NHANES FibroScan has enough data to anchor a cell, and the only ages
+the trial enrols (65-80, plus a 60-64 buffer). The consuming simulation's loader
+is strict: it needs a row for **every** `(sex, age_start)` in the GBD skeleton
+(ages 0 through 95+), because stub fallbacks were removed at the close of Model 4.
 
-This notebook reads `liver_stiffness_age_sex_lognormal.csv` from
-notebook 04 and rewrites it in place with placeholder rows for
-every sub-60 skeleton bin. Each placeholder uses the corresponding
-sex's youngest fitted band (60–64) for `mean_kpa` and `sd_kpa`;
-`f4_share_target` is left as the same anchor F4 share. The
-simulation only enrolls ages 65–80, so these placeholder cells are
-never sampled at run time — they exist only to satisfy the
-artifact build's coverage check.
+This notebook reads the two `outputs/` tables and rewrites each **in place** with
+forward-filled placeholder rows for every sub-60 skeleton bin, using the
+corresponding sex's youngest fitted band (60-64). The simulation only enrols
+65-80, so these placeholders are never sampled at run time -- they exist only to
+satisfy the artifact build's coverage check, and are tagged `source =
+forward_filled` so readers can spot them.
 
-Why a forward fill from the 60–64 row rather than a literature-based
-younger-age curve?
-
-- The trial doesn't enroll under 65, so any value is fine for
-  artifact-build purposes — none of these cells affect the trial
-  outcome.
-- A constant fill is the most conservative thing we can do without
-  another NHANES extraction. If a future model needs to enroll
-  under 60, replace these rows with cell-fitted values from a
-  younger LSM dataset (e.g., elastography from the regular NHANES
-  cycles once they collect it across the full age range).
-- The under-60 placeholders are clearly tagged via `f4_share_target`
-  inheriting from the 60–64 anchor — readers can spot them in the
-  CSV.
-
-Skeleton age_start values come from
-`vivarium_inputs.interface.get_demographic_dimensions("United States
-of America")`: GBD age groups 0, 0.0192, 0.0767, 0.5, 1, 2, 5, 10,
-15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90,
-95. The loader caps `age_start` at 80 before lookup, so anything
-≥80 already lands on the 80–89 row from notebook 04.
+The fitted ages 60+ are unchanged, including the **open-ended 80+ terminal band**
+(`age_start=80, age_end=125`): NHANES top-codes age at 80, so that cell is the
+whole 80+ mixture, not a 5-year bin, and the loader (which caps `age_start` at 80)
+lands every 80+ simulant on it.
 """,
     "intro",
 ))
 
-
 CELLS.append(code(
     """\
 from pathlib import Path
+import numpy as np, pandas as pd
 
-import pandas as pd
+OUT = Path('outputs')
+LSM_CSV = OUT / 'liver_stiffness_age_sex_lognormal.csv'
+CAP_CSV = OUT / 'cap_age_sex_distribution.csv'
 
-OUT = Path("outputs")
-csv_path = OUT / "liver_stiffness_age_sex_lognormal.csv"
-
-fitted = pd.read_csv(csv_path)
-print("notebook-04 fitted rows:")
-print(fitted.round(3).to_string(index=False))
-""",
-    "load",
-))
-
-
-CELLS.append(code(
-    """\
-# Sub-60 GBD age_start values (after the loader's age_start ≤ 80
-# cap, but the cap doesn't bite below 60). Floats — the loader
-# does NOT cast to int for LSM, so each row's age_start must match
-# the skeleton's value exactly.
-SUB_60_AGE_STARTS = [
-    0.0, 0.01917808, 0.07671233, 0.5,
-    1.0, 2.0, 5.0,
-    10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0,
-]
-
-# Anchor each sex's placeholder rows to its 60–64 fitted row. That
-# row has age_start 60.0 in notebook 04's output.
-anchor = (
-    fitted[fitted["age_start"] == 60.0]
-    .set_index("sex")[["mean_kpa", "sd_kpa", "f4_share_target"]]
-)
-print("anchor rows (60–64):")
-print(anchor.round(3).to_string())
-""",
-    "anchor",
-))
-
-
-CELLS.append(code(
-    """\
-# Build sub-60 placeholder rows: cross-product of (sex × sub-60 age
-# bins). age_end is exclusive — the GBD bins below 60 are spaced as
-# {0, 0.0192, 0.0767, 0.5, 1, 2, 5, 10, 15, 20, 25, 30, 35, 40,
-# 45, 50, 55, 60}, so each row's age_end is the next age_start.
+# Sub-60 GBD age_start values and the age grid used to set each row's exclusive
+# age_end (each row's age_end is the next skeleton age_start).
 GBD_AGE_GRID = [
-    0.0, 0.01917808, 0.07671233, 0.5,
-    1.0, 2.0, 5.0,
+    0.0, 0.01917808, 0.07671233, 0.5, 1.0, 2.0, 5.0,
     10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0,
 ]
+SUB_60_AGE_STARTS = GBD_AGE_GRID[:-1]
 age_end_for = dict(zip(GBD_AGE_GRID[:-1], GBD_AGE_GRID[1:]))
 
-placeholder_rows = []
-for sex in ("Female", "Male"):
-    a = anchor.loc[sex]
-    for age_lo in SUB_60_AGE_STARTS:
-        placeholder_rows.append({
-            "sex": sex,
-            "age_start": age_lo,
-            "age_end": age_end_for[age_lo],
-            "mean_kpa": float(a["mean_kpa"]),
-            "sd_kpa": float(a["sd_kpa"]),
-            "f4_share_target": float(a["f4_share_target"]),
-        })
-
-placeholders = pd.DataFrame(placeholder_rows)
-print(f"placeholder rows added: {len(placeholders)}")
-print(placeholders.round(3).head(8).to_string(index=False))
+def sub60_label(lo):
+    hi = age_end_for[lo]
+    return f'{lo:g}-{hi:g}'
 """,
-    "placeholders",
+    "grid",
 ))
-
 
 CELLS.append(code(
     """\
-full = pd.concat([placeholders, fitted], ignore_index=True)
-full = full.sort_values(["sex", "age_start"]).reset_index(drop=True)
+def extend_over_skeleton(csv_path):
+    fitted = pd.read_csv(csv_path)
+    # idempotent: drop any placeholder rows from a prior run before re-extending
+    if 'source' in fitted.columns:
+        fitted = fitted[fitted['source'] != 'forward_filled'].reset_index(drop=True)
+    anchor = fitted[fitted['age_start'] == 60.0].set_index('sex')
+    fill_cols = [c for c in fitted.columns
+                 if c not in ('sex', 'age_start', 'age_end', 'age_group',
+                              'top_coded', 'source', 'n', 'n_eff')]
+    placeholders = []
+    for sex in ('Female', 'Male'):
+        a = anchor.loc[sex]
+        for lo in SUB_60_AGE_STARTS:
+            row = {'sex': sex, 'age_start': lo, 'age_end': age_end_for[lo],
+                   'age_group': sub60_label(lo), 'top_coded': False,
+                   'source': 'forward_filled', 'n': 0, 'n_eff': 0.0}
+            for c in fill_cols:
+                row[c] = a[c]
+            placeholders.append(row)
+    full = (pd.concat([pd.DataFrame(placeholders), fitted], ignore_index=True)
+              .sort_values(['sex', 'age_start']).reset_index(drop=True))
 
-# Defensive: every (sex, age_start) we care about must be present.
-expected = set()
-for sex in ("Female", "Male"):
-    for a in SUB_60_AGE_STARTS + [60.0, 65.0, 70.0, 75.0, 80.0]:
-        expected.add((sex, a))
-got = set(zip(full["sex"], full["age_start"]))
-missing = sorted(expected - got)
-assert not missing, f"missing skeleton cells after merge: {missing}"
+    # Coverage check: every skeleton (sex, age_start) present after the loader's
+    # age_start <= 80 cap (so anything >= 80 lands on the 80+ row).
+    expected = {(s, a) for s in ('Female', 'Male')
+                for a in SUB_60_AGE_STARTS + [60.0, 65.0, 70.0, 75.0, 80.0]}
+    got = set(zip(full['sex'], full['age_start']))
+    missing = sorted(expected - got)
+    assert not missing, f'missing skeleton cells: {missing}'
 
-full.to_csv(csv_path, index=False)
-print(f"rewrote {csv_path} with {len(full)} rows")
-print()
-print("first / last rows:")
-print(full.head(8).round(3).to_string(index=False))
-print("...")
-print(full.tail(8).round(3).to_string(index=False))
+    full = full[list(fitted.columns)]     # preserve column order
+    full.to_csv(csv_path, index=False)
+    return full
+
+lsm_full = extend_over_skeleton(LSM_CSV)
+cap_full = extend_over_skeleton(CAP_CSV)
+print(f'LSM: {len(lsm_full)} rows  ({(lsm_full[\"source\"] == \"fitted\").sum()} fitted, '
+      f'{(lsm_full[\"source\"] == \"forward_filled\").sum()} forward-filled)')
+print(f'CAP: {len(cap_full)} rows  ({(cap_full[\"source\"] == \"fitted\").sum()} fitted, '
+      f'{(cap_full[\"source\"] == \"forward_filled\").sum()} forward-filled)')
 """,
-    "write_csv",
+    "extend",
 ))
 
+CELLS.append(code(
+    """\
+# Show the transition around age 60 and the open-ended 80+ terminal row.
+cols = ['sex', 'age_start', 'age_end', 'age_group', 'source', 'mean_kpa', 'sd_kpa', 'f4_share_target']
+mid = lsm_full[(lsm_full['sex'] == 'Female') & (lsm_full['age_start'].between(50, 80))]
+print('LSM, Female, ages 50-80 (forward-fill -> fitted, ending in open 80+):')
+print(mid[cols].round(3).to_string(index=False))
+print()
+capcols = ['sex', 'age_start', 'age_end', 'age_group', 'source', 'cap_mean', 'cap_sd']
+print('CAP, Female, ages 55-80:')
+print(cap_full[(cap_full['sex'] == 'Female') & (cap_full['age_start'].between(55, 80))][capcols]
+      .round(2).to_string(index=False))
+""",
+    "peek",
+))
 
 CELLS.append(md(
     """\
 ## Summary
 
-The CSV at `outputs/liver_stiffness_age_sex_lognormal.csv` now
-covers every (sex, age_start) cell in the GBD demographic skeleton
-that the consuming simulation project's loader needs after the
-age_start ≤ 80 cap. Sub-60 cells are placeholder rows
-forward-filled from the corresponding sex's 60–64 fitted row;
-fitted ages 60–89 come from notebook 04 unchanged.
-
-If a future model enrolls under 60, replace these placeholder rows
-with cell-fitted values from a wider-age LSM dataset.
+Both `outputs/liver_stiffness_age_sex_lognormal.csv` and
+`outputs/cap_age_sex_distribution.csv` now cover every `(sex, age_start)` cell the
+strict loader needs after its `age_start <= 80` cap. Sub-60 cells are
+forward-filled from the 60-64 fit and tagged `source = forward_filled`; fitted
+ages 60+ (with the open-ended 80+ terminal band) are unchanged. If a future model
+enrols under 60, replace the placeholders with cell fits from a wider-age dataset.
 """,
     "summary",
 ))
 
-
-nb = {
-    "cells": CELLS,
-    "metadata": {
-        "kernelspec": {
-            "display_name": "Python 3",
-            "language": "python",
-            "name": "python3",
-        },
-        "language_info": {"name": "python", "version": "3.12"},
-    },
-    "nbformat": 4,
-    "nbformat_minor": 5,
-}
-
-out = HERE / "05_extend_to_skeleton.ipynb"
-out.write_text(json.dumps(nb, indent=1) + "\n")
-print(f"wrote {out} ({len(CELLS)} cells)")
+if __name__ == "__main__":
+    write_notebook(HERE / "05_extend_to_skeleton.ipynb", CELLS)

@@ -1,0 +1,9 @@
+project_pair_key,risk_a,risk_b,rho_value_space,rho_propensity,flipped,n,source
+cap_AND_high_body_mass_index_in_adults,cap,BMI,0.479,0.479,False,1752,NHANES P_LUX 2017-Mar 2020
+cap_AND_high_fasting_plasma_glucose,cap,FPG,0.274,0.274,False,842,NHANES P_LUX 2017-Mar 2020
+cap_AND_high_ldl_cholesterol,cap,LDL_C,-0.066,-0.066,False,826,NHANES P_LUX 2017-Mar 2020
+cap_AND_high_systolic_blood_pressure,cap,SBP,0.006,0.006,False,1608,NHANES P_LUX 2017-Mar 2020
+cap_AND_kidney_dysfunction,cap,kidney_dysfunction,-0.081,0.081,True,1650,NHANES P_LUX 2017-Mar 2020
+cap_AND_lipoprotein_a,cap,lipoprotein_a,0.0,0.0,False,0,literature (no NHANES overlap)
+cap_AND_liver_stiffness,cap,liver_stiffness,0.256,0.256,False,1787,NHANES P_LUX 2017-Mar 2020
+cap_AND_smoking,cap,smoking,0.025,-0.025,True,1787,NHANES P_LUX 2017-Mar 2020

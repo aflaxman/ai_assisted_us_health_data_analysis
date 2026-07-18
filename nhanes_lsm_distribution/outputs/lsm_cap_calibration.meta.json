@@ -1,0 +1,45 @@
+{
+  "lsm_dist_family": "lognormal",
+  "lsm_cutoffs_kpa": [
+    6.0,
+    8.0,
+    10.0,
+    15.0
+  ],
+  "lsm_stage_labels": [
+    "F0",
+    "F1",
+    "F2",
+    "F3",
+    "F4"
+  ],
+  "lsm_stage_weights": [
+    1.0,
+    2.0,
+    2.0,
+    2.0,
+    0.5
+  ],
+  "lsm_calibration_objective": "minimise sum_s stage_weight_s * (fit_share_s - target_share_s)^2 over stages F0..F4; target shares optionally smoothed across age",
+  "lsm_clip_kpa": [
+    1.5,
+    75.0
+  ],
+  "cap_dist_family": "normal",
+  "cap_cutoffs_dbm": [
+    248.0,
+    268.0,
+    280.0
+  ],
+  "cap_grade_labels": [
+    "S0",
+    "S1",
+    "S2",
+    "S3"
+  ],
+  "cap_steatosis_gate_dbm": 288.0,
+  "pooling": "P_LUX (2017-Mar 2020, WTMECPRP) + LUX_L (2021-Aug 2023, WTMEC2YR); each cycle MEC weight halved",
+  "fitted_age_range": "60+ (5-year bands, 80+ terminal); sub-60 forward-filled in notebook 05",
+  "n_pooled_lsm_60plus": 5005,
+  "smoothing": "per-cutoff cumulative share, logit space, effective-N weighted quadratic in age"
+}
