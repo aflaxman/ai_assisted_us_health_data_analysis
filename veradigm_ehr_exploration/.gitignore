@@ -1,0 +1,15 @@
+.venv/
+outputs/
+.ipynb_checkpoints/
+__pycache__/
+
+# Quarantined pending compliance refactor. Each of these embeds vendor table
+# names, field names, documented fill rates or layout, which the license bars
+# from any repo as a derivative schema. They stay on disk as working notes.
+# See ANALYSIS_PLAN.md, "Working notes not in this repo".
+vnehr_schema.json
+README.md
+lymphedema.md
+extract_schema.py
+simulate_vnehr.py
+inventory_real_data.py
