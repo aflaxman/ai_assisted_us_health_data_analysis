@@ -1,7 +1,8 @@
 # Analysis plan — cancer-related lymphedema
 
 **Licensed cohort:** ~2.9M deidentified cancer patients (breast, melanoma, female
-genital, male genital, urinary), 2020–2025, ambulatory EHR.
+genital, male genital, urinary), 2020–2025, ambulatory EHR — **as agreed, and not
+yet confirmed against what was delivered.** See `DELIVERY_CONFORMANCE.md`.
 **Term:** license effective 9 July 2026, expires ~9 July 2027.
 **Purpose:** non-commercial research and academic publication only.
 
@@ -64,6 +65,11 @@ substance only.
 
 No Data is touched in this phase.
 
+0. **Confirm the delivery is what was licensed.** See `DELIVERY_CONFORMANCE.md`.
+   This blocks everything below it. The cohort description in this plan is taken
+   from the agreement, not from the delivery, and the two have not yet been
+   reconciled — if they diverge, the study design changes before the statistics
+   do. Do not begin Phase 1 on an unconfirmed extract.
 1. Resolve the three open license questions in writing (see `CLAUDE.md`). The
    first one gates Phase 2: whether a latent-variable measurement model, used as
    an analysis method for a publication with no model deliverable, falls outside
