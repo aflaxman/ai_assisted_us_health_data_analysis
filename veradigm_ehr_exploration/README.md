@@ -34,6 +34,9 @@ The Data is licensed; the analysis code is not. So the two are kept apart:
    dataset with the same shape, completeness structure, referential integrity,
    and deidentification artifacts, plus a truth directory holding the quantities
    deidentification destroys — so methods that try to recover them can be scored.
+   Its cancer cohort adds the study's own subject matter: five site groups, the
+   operations and drugs that treat them, an unobserved lymphedema state, and the
+   five imperfect traces that state leaves in an ambulatory record.
 4. **Only the analyst runs anything on the Data**, and results come back as
    aggregates with small cells suppressed.
 
@@ -46,7 +49,7 @@ uv venv && uv pip install -r requirements.txt
 # The dictionary is confidential and lives outside this repo.
 .venv/bin/python extract_schema.py --dictionary <path-to-dictionary>
 
-# Synthetic dataset for development.
+# Synthetic dataset for development: cancer cohort, 2020-2025, by default.
 .venv/bin/python simulate_vnehr.py --n-patients 5000 --seed 0
 
 # Dry run of the profiler against the synthetic data.
@@ -75,16 +78,40 @@ is exactly the threshold.
 Its first job is not analysis but acceptance testing — see
 `DELIVERY_CONFORMANCE.md`.
 
+## The simulated cancer cohort
+
+`--cohort cancer`, the default, is the testbed for the research question. Every
+person carries a malignancy in one of the five site groups over a five-year
+window, with the operation recorded as free text, adjuvant endocrine therapy
+refilled for years, and taxane chemotherapy. The constraints that make the study
+hard are reproduced rather than wished away: the date of an operation is
+recorded for only a small minority of entries, radiation is almost never visible
+because it happens elsewhere, and laterality appears nowhere.
+
+Lymphedema is simulated as an **unobserved** state driven by nodal-surgery
+extent, radiation, chemotherapy, site, and body mass, arriving 12 to 36 months
+after treatment. The record shows only five imperfect traces of it — diagnosis
+codes, therapy referrals, compression equipment, manual therapy and bioimpedance
+procedures, and recurrent limb cellulitis — each with poor sensitivity on its
+own. Crucially the five are **not conditionally independent given the state**:
+one per-person care-engagement propensity drives both how often someone is seen
+and how readily each trace is written down, so they agree far more often than
+independence predicts. That is the dependence structure the planned measurement
+model has to handle, and a testbed without it could not tell a naive latent
+class model from one that models the dependence.
+
+`_truth/` records what the delivery cannot: true status, onset date, surgical
+extent, treatment index date, and the care-engagement value.
+
+`--cohort general` keeps the earlier general-population content and the longer
+window, for work on the completeness and de-identification machinery alone.
+
 ## Status
 
 Delivery conformance is **unconfirmed**, and nothing else should start until it
 is. The analysis plan's cohort description comes from the agreement, not from
 the delivery, and the two have not been reconciled.
 
-Two known gaps in the simulator, both of which matter before the phenotype work
-in the plan's Phase 2:
-
-- It contains no oncology content, so nothing for the actual research question
-  can be developed against it yet.
-- Categorical history entries are generated independently of their descriptive
-  text, so any extraction that filters on a category cannot be tested against it.
+Nothing that consumes the latent state has been built. The phenotype and the
+measurement model in the plan's Phase 2 are gated on the first open license
+question, so the simulator supplies the testbed and stops there.

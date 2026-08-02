@@ -16,10 +16,19 @@ practitioner ids, and the denominator traps (people with no clinical records at
 all; a mortality table holding only decedents because the deceased indicator on
 the person table is never populated).
 
-Ground truth that de-identification destroys is written to a ``_truth/``
-subdirectory so the output doubles as a testbed for recovery methods.
+Two cohorts are available. ``--cohort cancer`` (the default) mimics the licensed
+extract: every person carries a malignancy in one of five site groups over a
+five-year window, with the treatment history, endocrine therapy and chemotherapy
+that go with it, and an unobserved lymphedema state that leaves five imperfect
+traces in the record. ``--cohort general`` keeps the general-population content
+and the longer window.
+
+Ground truth that de-identification destroys -- and, for the cancer cohort, the
+latent state the record only hints at -- is written to a ``_truth/``
+subdirectory, so the output doubles as a testbed for recovery methods.
 
     python simulate_vnehr.py --n-patients 5000 --seed 12345
+    python simulate_vnehr.py --cohort general --start-year 2010
     python simulate_vnehr.py --format psv --out ../data/derived/vnehr_sim
 """
 
@@ -38,11 +47,37 @@ import schema_config
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_OUT = os.path.abspath(os.path.join(HERE, "..", "data", "derived", "vnehr_sim"))
 
-# Delivery covers roughly 2010 through mid-2025.
+YEAR = 365.25
+
+# Two cohorts. The licensed extract is cancer patients over a five-year window,
+# so that is the default; the general-population cohort is kept because the
+# de-identification and completeness machinery is easier to reason about without
+# oncology content on top of it.
+COHORT_CANCER = "cancer"
+COHORT_GENERAL = "general"
+DEFAULT_START_YEAR = {COHORT_CANCER: 2020, COHORT_GENERAL: 2010}
+DEFAULT_END_YEAR = 2025
+
+# The observation window, in days since the epoch. ``set_window`` is called once
+# at startup; everything downstream reads these.
 START_DAY = int(np.datetime64("2010-01-01", "D").astype("int64"))
 EXTRACT_DAY = int(np.datetime64("2025-06-30", "D").astype("int64"))
 EXTRACT_YEAR = 2025
-YEAR = 365.25
+
+
+def set_window(start_year, end_year):
+    """Point the simulation at a delivery window.
+
+    The delivery this mimics was cut in the middle of 2025, so an end year of
+    2025 stops at 30 June; any other end year runs to 31 December.
+    """
+    global START_DAY, EXTRACT_DAY, EXTRACT_YEAR
+    if end_year <= start_year:
+        raise ValueError("the window must span at least one full year")
+    last_day = f"{end_year}-06-30" if end_year == DEFAULT_END_YEAR else f"{end_year}-12-31"
+    START_DAY = int(np.datetime64(f"{start_year}-01-01", "D").astype("int64"))
+    EXTRACT_DAY = int(np.datetime64(last_day, "D").astype("int64"))
+    EXTRACT_YEAR = end_year
 
 # Fields flagged "Populated" whose fill rate rounds to 0.0 in the dictionary are
 # rare rather than absent; give them a token presence so code that touches them
@@ -400,11 +435,11 @@ ACUTE_CONDITIONS = [
     ("R51.9", "Headache, unspecified"),
     ("N39.0", "Urinary tract infection, site not specified"),
     ("J02.9", "Acute pharyngitis, unspecified"),
-    ("L03.115", "Cellulitis of right lower limb"),
+    ("L03.119", "Cellulitis of unspecified part of limb"),
     ("R10.9", "Unspecified abdominal pain"),
     ("Z00.00", "Encounter for general adult medical examination without abnormal findings"),
     ("Z23", "Encounter for immunization"),
-    ("M25.561", "Pain in right knee"),
+    ("M25.569", "Pain in unspecified knee"),
     ("R53.83", "Other fatigue"),
     ("H66.90", "Otitis media, unspecified, unspecified ear"),
     ("K21.9", "Gastro-esophageal reflux disease without esophagitis"),
@@ -422,7 +457,7 @@ CPT_CONDITION_CODES = ["99213", "99214", "99396", "99385", "99203"]
 INTERVENTIONS = [
     ("Chest X-ray, 2 views", "71046", roles.INTERVENTION_IMAGING),
     ("Electrocardiogram, 12 lead", "93000", roles.INTERVENTION_DIAGNOSTIC_STUDY),
-    ("Screening mammography, bilateral", "77067", roles.INTERVENTION_IMAGING),
+    ("Screening mammography", "77067", roles.INTERVENTION_IMAGING),
     ("Colonoscopy, screening", "45378", roles.INTERVENTION_PROCEDURAL),
     ("Ultrasound, abdomen complete", "76700", roles.INTERVENTION_DIAGNOSTICS),
     ("CT abdomen and pelvis with contrast", "74177", roles.INTERVENTION_IMAGING),
@@ -495,29 +530,276 @@ SMOKING_TEXT = {
     "Unknown if ever smoked": ["Smoking status unknown", "Unknown if ever smoked",
                                "tobacco use unknown", "Smoking status not documented"],
 }
-# (category role, free-text descriptions filed under it)
-NONSMOKING_BACKGROUND = [
-    (roles.BACKGROUND_FAMILY,
+# Background entries as (relative weight, the category roles the concept is
+# legitimately filed under, the free text filed under them).
+#
+# Category and text are drawn together, so no entry lands under a category its
+# own text contradicts. The redundancy of the real data is kept deliberately:
+# one clinical concept routinely appears under several categories -- a family
+# history under either family category, an operation under either surgical one,
+# smoking status under any of the many categories documented as carrying it --
+# because extraction code has to survive that. What is gone is the incoherence.
+BACKGROUND_CONCEPTS = [
+    (3.0, (roles.BACKGROUND_FAMILY, roles.BACKGROUND_FAMILY_VARIANT),
      ["Family history of diabetes mellitus", "Family history of breast cancer",
-      "Family history of coronary artery disease", "Family history of stroke"]),
-    (roles.BACKGROUND_FAMILY_VARIANT,
-     ["hypertension", "colon cancer", "diabetes mellitus type 2"]),
-    (roles.BACKGROUND_SOCIAL,
+      "Family history of coronary artery disease", "Family history of stroke",
+      "Family history of colon cancer", "FH: breast cancer",
+      "hypertension", "colon cancer", "diabetes mellitus type 2"]),
+    (3.0, (roles.BACKGROUND_SOCIAL,),
      ["Alcohol use: occasional", "Lives alone", "Employed full time",
-      "Regular exercise 3x/week", "Alcohol use: none"]),
-    (roles.BACKGROUND_SURGERY,
+      "Regular exercise 3x/week", "Alcohol use: none", "Retired",
+      "Lives with spouse", "Alcohol use: 2-3 drinks per week"]),
+    (2.6, (roles.BACKGROUND_SURGERY, roles.BACKGROUND_SURGERY_VARIANT),
      ["Appendectomy", "Cholecystectomy", "Total knee arthroplasty",
-      "Cesarean section", "Tonsillectomy", "Coronary artery bypass graft"]),
-    (roles.BACKGROUND_SURGERY_VARIANT,
-     ["Hernia repair", "Cataract extraction, right eye", "Hysterectomy"]),
-    (roles.BACKGROUND_DEVICE,
-     ["CPAP machine", "Insulin pump", "Cardiac pacemaker", "Hearing aid, bilateral"]),
-    (roles.BACKGROUND_PREVENTIVE_CARE,
-     ["Colonoscopy 2019", "Mammogram 2022", "Annual wellness visit"]),
-    (roles.BACKGROUND_TRAVEL, ["Travel to Mexico 2018", "Travel to Southeast Asia"]),
-    (roles.BACKGROUND_PREGNANCY,
+      "Cesarean section", "Tonsillectomy", "Coronary artery bypass graft",
+      "Hernia repair", "Cataract extraction", "Hysterectomy"]),
+    (1.1, (roles.BACKGROUND_DEVICE,),
+     ["CPAP machine", "Insulin pump", "Cardiac pacemaker", "Hearing aids",
+      "Rolling walker", "Home nebulizer"]),
+    (1.5, (roles.BACKGROUND_PREVENTIVE_CARE,),
+     ["Colonoscopy 2019", "Mammogram 2022", "Annual wellness visit",
+      "Influenza vaccine documented"]),
+    (0.4, (roles.BACKGROUND_TRAVEL,), ["Travel to Mexico 2018", "Travel to Southeast Asia"]),
+    (0.9, (roles.BACKGROUND_PREGNANCY,),
      ["G2P2", "Full term vaginal delivery", "Gestational diabetes"]),
 ]
+
+# Coded diagnoses that a background entry can legitimately carry, by the text it
+# holds. Only entries with a code here are eligible to be linked from the coded
+# diagnosis table, so that link is coherent too.
+SMOKING_HISTORY_CODES = {
+    "Current every day smoker": ["F17.210", "Z72.0"],
+    "Current some day smoker": ["F17.210", "Z72.0"],
+    "Former smoker": ["Z87.891"],
+}
+
+# --------------------------------------------------------------------------
+# oncology catalogs
+#
+# Five site groups, the operations that treat them, the drugs given afterwards,
+# and the traces lymphedema leaves. Laterality appears nowhere: the delivery
+# does not capture it, so every code here is the unspecified-side member of its
+# family and no free text names a side. That absence is the point -- it is what
+# rules out the standard contralateral-limb design.
+# --------------------------------------------------------------------------
+
+SITE_BREAST = "breast"
+SITE_MELANOMA = "melanoma"
+SITE_FEMALE_GENITAL = "female_genital"
+SITE_MALE_GENITAL = "male_genital"
+SITE_URINARY = "urinary"
+SITE_KEYS = (SITE_BREAST, SITE_MELANOMA, SITE_FEMALE_GENITAL, SITE_MALE_GENITAL,
+             SITE_URINARY)
+# Breast dominates an ambulatory cancer panel; prostate is the next largest.
+SITE_MIX = (0.44, 0.09, 0.12, 0.19, 0.16)
+
+# Qualifying malignancies, as (ICD-10, description).
+SITE_MALIGNANCY = {
+    SITE_BREAST: [
+        ("C50.919", "Malignant neoplasm of unspecified site of unspecified female breast"),
+        ("C50.919", "Breast cancer"),
+        ("C50.929", "Malignant neoplasm of unspecified site of unspecified male breast"),
+    ],
+    SITE_MELANOMA: [
+        ("C43.9", "Malignant melanoma of skin, unspecified"),
+        ("C43.59", "Malignant melanoma of other part of trunk"),
+        ("C43.4", "Malignant melanoma of scalp and neck"),
+        ("C43.70", "Malignant melanoma of unspecified lower limb, including hip"),
+        ("C43.60", "Malignant melanoma of unspecified upper limb, including shoulder"),
+    ],
+    SITE_FEMALE_GENITAL: [
+        ("C54.1", "Malignant neoplasm of endometrium"),
+        ("C56.9", "Malignant neoplasm of unspecified ovary"),
+        ("C53.9", "Malignant neoplasm of cervix uteri, unspecified"),
+        ("C55", "Malignant neoplasm of uterus, part unspecified"),
+        ("C51.9", "Malignant neoplasm of vulva, unspecified"),
+    ],
+    SITE_MALE_GENITAL: [
+        ("C61", "Malignant neoplasm of prostate"),
+        ("C62.90", "Malignant neoplasm of unspecified testis, unspecified descent"),
+        ("C60.9", "Malignant neoplasm of penis, unspecified"),
+    ],
+    SITE_URINARY: [
+        ("C67.9", "Malignant neoplasm of bladder, unspecified"),
+        ("C64.9", "Malignant neoplasm of unspecified kidney, except renal pelvis"),
+        ("C65.9", "Malignant neoplasm of unspecified renal pelvis"),
+        ("C66.9", "Malignant neoplasm of unspecified ureter"),
+        ("C68.9", "Malignant neoplasm of urinary organ, unspecified"),
+    ],
+}
+
+# Personal-history codes, for the coded diagnoses that hang off a background row.
+SITE_HISTORY_CODE = {
+    SITE_BREAST: "Z85.3", SITE_MELANOMA: "Z85.820", SITE_FEMALE_GENITAL: "Z85.44",
+    SITE_MALE_GENITAL: "Z85.46", SITE_URINARY: "Z85.51",
+}
+
+# Operations, as free text, because that is how a primary care practice records
+# an operation performed somewhere else. ``dissection`` is the full nodal
+# clearance and ``sentinel`` the limited one; the risk gap between them is the
+# dominant exposure contrast in this literature.
+SITE_SURGERY = {
+    SITE_BREAST: {
+        "primary": ["Mastectomy", "Lumpectomy", "Partial mastectomy",
+                    "Modified radical mastectomy", "Breast conserving surgery",
+                    "Simple mastectomy", "s/p lumpectomy"],
+        "sentinel": ["Sentinel lymph node biopsy", "Sentinel node biopsy, axilla",
+                     "SLN biopsy"],
+        "dissection": ["Axillary lymph node dissection", "Axillary node dissection",
+                       "Complete axillary dissection", "Axillary lymphadenectomy"],
+    },
+    SITE_MELANOMA: {
+        "primary": ["Wide local excision", "Wide local excision of melanoma",
+                    "Excision of melanoma", "Wide excision, skin"],
+        "sentinel": ["Sentinel lymph node biopsy", "SLN biopsy"],
+        "dissection": ["Inguinal lymphadenectomy", "Complete lymph node dissection",
+                       "Axillary lymph node dissection"],
+    },
+    SITE_FEMALE_GENITAL: {
+        "primary": ["Total hysterectomy", "Radical hysterectomy",
+                    "Hysterectomy and salpingo-oophorectomy", "Radical vulvectomy",
+                    "Debulking surgery"],
+        "sentinel": ["Sentinel lymph node biopsy", "SLN mapping"],
+        "dissection": ["Pelvic lymph node dissection", "Pelvic lymphadenectomy",
+                       "Inguinal lymphadenectomy", "Pelvic and para-aortic lymphadenectomy"],
+    },
+    SITE_MALE_GENITAL: {
+        "primary": ["Radical prostatectomy", "Robotic assisted radical prostatectomy",
+                    "Orchiectomy", "Partial penectomy", "s/p radical prostatectomy"],
+        "sentinel": ["Sentinel lymph node biopsy"],
+        "dissection": ["Pelvic lymph node dissection", "Inguinal lymphadenectomy",
+                       "Retroperitoneal lymph node dissection"],
+    },
+    SITE_URINARY: {
+        "primary": ["Radical cystectomy", "Radical nephrectomy", "Partial nephrectomy",
+                    "Transurethral resection of bladder tumor"],
+        "sentinel": ["Sentinel lymph node biopsy"],
+        "dissection": ["Pelvic lymph node dissection", "Pelvic lymphadenectomy",
+                       "Retroperitoneal lymph node dissection"],
+    },
+}
+
+EXTENT_NONE, EXTENT_SENTINEL, EXTENT_DISSECTION = "none", "sentinel", "dissection"
+
+# Per site: share of the cohort that is female, mean age, the nodal-surgery mix,
+# and the probability of radiation, taxane chemotherapy and endocrine therapy.
+# The lymphedema offset carries what the site contributes beyond its treatment.
+SITE_PROFILE = {
+    SITE_BREAST: dict(female=0.990, age=61.0, sentinel=0.52, dissection=0.15,
+                      primary_only=0.62, radiation=0.48, taxane=0.30, endocrine=0.72,
+                      risk=0.35),
+    SITE_MELANOMA: dict(female=0.450, age=60.0, sentinel=0.35, dissection=0.06,
+                        primary_only=0.95, radiation=0.12, taxane=0.03, endocrine=0.0,
+                        risk=-0.35),
+    SITE_FEMALE_GENITAL: dict(female=1.0, age=62.0, sentinel=0.16, dissection=0.30,
+                              primary_only=0.80, radiation=0.32, taxane=0.28,
+                              endocrine=0.08, risk=0.25),
+    SITE_MALE_GENITAL: dict(female=0.0, age=68.0, sentinel=0.08, dissection=0.24,
+                            primary_only=0.55, radiation=0.30, taxane=0.06,
+                            endocrine=0.0, risk=0.0),
+    SITE_URINARY: dict(female=0.280, age=69.0, sentinel=0.05, dissection=0.22,
+                       primary_only=0.62, radiation=0.15, taxane=0.14, endocrine=0.0,
+                       risk=-0.10),
+}
+
+# Radiation is delivered in radiation oncology centres, so an ambulatory record
+# almost never shows it even when it happened. Truth carries it; the data barely
+# does. Same idea, milder, for the operation itself.
+RADIATION_TEXT = ["Radiation therapy", "Adjuvant radiotherapy", "s/p radiation therapy"]
+RADIATION_VISIBILITY = 0.02
+
+# Adjuvant endocrine therapy: prescribed and refilled in ambulatory care for
+# years after breast cancer, which makes its start the best available surrogate
+# for a treatment index date.
+ENDOCRINE_DRUGS = [
+    ("Tamoxifen citrate 20 MG oral tablet", "00093078201", "198240", "20", "MG", "Tabs",
+     "Oral", "endocrine"),
+    ("Anastrozole 1 MG oral tablet", "00310020130", "199224", "1", "MG", "Tabs", "Oral",
+     "endocrine"),
+    ("Letrozole 2.5 MG oral tablet", "00078024915", "200064", "2.5", "MG", "Tabs", "Oral",
+     "endocrine"),
+    ("Exemestane 25 MG oral tablet", "00009751301", "310261", "25", "MG", "Tabs", "Oral",
+     "endocrine"),
+]
+TAXANE_DRUGS = [
+    ("Paclitaxel 100 MG/16.7 ML injection", "00703475001", "583214", "100", "MG/16.7ML",
+     "Soln", "Intravenous", "taxane"),
+    ("Docetaxel 80 MG/4 ML injection", "00703570001", "1093280", "80", "MG/4ML", "Soln",
+     "Intravenous", "taxane"),
+]
+CELLULITIS_DRUGS = [
+    ("Cephalexin 500 MG oral capsule", "00143992501", "309098", "500", "MG", "Caps",
+     "Oral", "cellulitis"),
+    ("Amoxicillin-clavulanate 875-125 MG oral tablet", "00093225601", "562251", "875-125",
+     "MG", "Tabs", "Oral", "cellulitis"),
+    ("Doxycycline hyclate 100 MG oral tablet", "00143314250", "1650143", "100", "MG",
+     "Tabs", "Oral", "cellulitis"),
+    ("Clindamycin HCl 300 MG oral capsule", "00093415301", "197517", "300", "MG", "Caps",
+     "Oral", "cellulitis"),
+    ("Sulfamethoxazole-trimethoprim 800-160 MG oral tablet", "00904639561", "200193",
+     "800-160", "MG", "Tabs", "Oral", "cellulitis"),
+]
+# Oncology drugs sit after the general catalog so the generic sampler, which
+# draws from the general range only, can never reach them by accident.
+FULL_DRUG_CATALOG = DRUG_CATALOG + ENDOCRINE_DRUGS + TAXANE_DRUGS + CELLULITIS_DRUGS
+ENDOCRINE_OFFSET = len(DRUG_CATALOG)
+TAXANE_OFFSET = ENDOCRINE_OFFSET + len(ENDOCRINE_DRUGS)
+CELLULITIS_OFFSET = TAXANE_OFFSET + len(TAXANE_DRUGS)
+
+# The five traces lymphedema leaves. Each is an imperfect indicator on its own;
+# ``SIGNAL_LOGIT`` below says how imperfect.
+SIGNAL_DIAGNOSIS = "diagnosis"
+SIGNAL_REFERRAL = "referral"
+SIGNAL_GARMENT = "garment"
+SIGNAL_THERAPY = "therapy"
+SIGNAL_CELLULITIS = "cellulitis"
+
+LYMPHEDEMA_POSTMASTECTOMY = ("I97.2", "Postmastectomy lymphedema syndrome")
+LYMPHEDEMA_UNSPECIFIED = ("I89.0", "Lymphedema, not elsewhere classified")
+# Congenital disease, not treatment-related: a distractor that any correct
+# phenotype has to exclude. It is only ever given to people without the state.
+LYMPHEDEMA_HEREDITARY = ("Q82.0", "Hereditary lymphedema")
+LIMB_CELLULITIS = ("L03.119", "Cellulitis of unspecified part of limb")
+
+LYMPHEDEMA_REFERRALS = ["Lymphedema Therapy", "Certified Lymphedema Therapist",
+                        "Lymphedema Management Program", "Complete Decongestive Therapy"]
+REHAB_REFERRALS = ["Physical Therapy", "Occupational Therapy", "Rehabilitation Services"]
+
+# Durable medical equipment, recorded as free text with its supply code, since
+# the background table has no code column of its own.
+COMPRESSION_GARMENTS = [
+    "Compression sleeve, custom fabricated (S8420)",
+    "Gradient pressure aid, arm, ready made (S8421)",
+    "Gradient pressure aid gauntlet, ready made (S8424)",
+    "Lymphedema compression wrap, below knee (A6545)",
+    "Compression garment for lymphedema management (A6549)",
+]
+COMPRESSION_PUMPS = [
+    "Pneumatic compression pump, non-segmental (E0650)",
+    "Segmental pneumatic compressor, home model (E0651)",
+    "Segmental pneumatic compressor with calibrated gradient pressure (E0652)",
+    "Segmental pneumatic appliance, full arm (E0665)",
+]
+# Stockings prescribed for venous disease, which is why the equipment signal is
+# specific but not perfectly so.
+VENOUS_STOCKINGS = ["Gradient compression stocking, below knee 18-30 mmHg (A6530)",
+                    "Compression stockings, thigh high (A6532)"]
+
+# (name, CPT, category role), ordered so that the manual-therapy entries come
+# first and the bioimpedance ones last. 97140 is shared with ordinary
+# musculoskeletal manual therapy -- the entry at ``SHARED_MANUAL_THERAPY`` is
+# the wording that carries no lymphedema meaning at all -- while 93702 is not.
+LYMPHEDEMA_THERAPY = [
+    ("Manual lymphatic drainage", "97140", roles.INTERVENTION_PROCEDURAL),
+    ("Complete decongestive therapy session", "97140", roles.INTERVENTION_PROCEDURAL),
+    ("Manual therapy techniques, one or more regions", "97140",
+     roles.INTERVENTION_PROCEDURAL),
+    ("Bioimpedance spectroscopy, lymphedema assessment", "93702",
+     roles.INTERVENTION_OTHER_TESTING),
+    ("Bioimpedance assessment of extracellular fluid", "93702",
+     roles.INTERVENTION_OTHER_TESTING),
+]
+SHARED_MANUAL_THERAPY = 2
 
 FINDING_VITALS = [
     ("Blood pressure systolic", "8480-6", "mm[Hg]", 128, 16),
@@ -629,7 +911,7 @@ def covid_weight(days):
 # organizations and practitioners
 # --------------------------------------------------------------------------
 
-def build_organizations(cfg, rng, n_patients):
+def build_organizations(cfg, rng, n_patients, cohort=COHORT_CANCER):
     """Organization frame plus the onboarding day that gates clinical activity."""
     blanked = cfg.deid.redacted_geography
     n = max(6, n_patients // 130)
@@ -638,7 +920,11 @@ def build_organizations(cfg, rng, n_patients):
     zip3 = np.array([rng.choice(STATE_ZIP3[s]) for s in states], dtype=object)
     zip3 = np.where([s in SMALL_POP_STATES for s in states], blanked, zip3)
     zip3 = np.where(rng.random(n) < 0.05, blanked, zip3)
-    onboard = START_DAY + (rng.beta(1.4, 2.2, size=n) * (EXTRACT_DAY - START_DAY - 400)).astype("int64")
+    # Over a fifteen-year window, onboarding is the EHR adoption ramp. Over the
+    # licensed five-year one the network is already mature when the window opens,
+    # so practices arrive near its start instead.
+    ramp = (1.0, 6.0) if cohort == COHORT_CANCER else (1.4, 2.2)
+    onboard = START_DAY + (rng.beta(*ramp, size=n) * (EXTRACT_DAY - START_DAY - 400)).astype("int64")
 
     # A few organizations contribute no clinical records at all, which is what
     # keeps their activity dates from being fully populated.
@@ -716,20 +1002,44 @@ CONDITIONS = ["diabetes", "hypertension", "hyperlipidemia", "obesity", "ckd", "m
               "depression", "asthma", "copd"]
 
 
-def build_patients(cfg, rng, n, orgs):
-    """Latent state per person: demography, home organization, risk, conditions."""
+def site_lookup(site, key, dtype="float64"):
+    """Per-person value of one ``SITE_PROFILE`` entry."""
+    table = {name: SITE_PROFILE[name][key] for name in SITE_KEYS}
+    out = np.zeros(site.size, dtype=dtype)
+    for name in SITE_KEYS:
+        out[site == name] = table[name]
+    return out
+
+
+def build_patients(cfg, rng, n, orgs, cohort=COHORT_CANCER):
+    """Latent state per person: demography, home organization, risk, conditions.
+
+    Under the cancer cohort every person also gets a site group, the extent of
+    their nodal surgery, the treatment they received, and the unobserved
+    lymphedema state that follows from those. None of that is delivered; it is
+    the truth the delivered signals are noisy readings of.
+    """
     oldest = cfg.deid.age_ceiling
+    cancer = cohort == COHORT_CANCER
     # Opaque hash-like keys, as the real synthetic person identifier is.
     ids = np.unique(rng.integers(1, 2 ** 52, size=n))
     while ids.size < n:
         ids = np.unique(np.concatenate([ids, rng.integers(1, 2 ** 52, size=n - ids.size)]))
     person_id = np.array([f"HI{v:030x}" for v in rng.permutation(ids)], dtype=object)
 
-    # Ambulatory panels skew adult and female; a small tail sits above the age cap.
-    child = rng.random(n) < 0.17
-    age = np.where(child,
-                   np.clip(rng.normal(8, 5.5, n), 0, 17),
-                   np.clip(rng.normal(49, 20.5, n), 18, 104))
+    site = pick(rng, SITE_KEYS, n, p=SITE_MIX) if cancer \
+        else np.full(n, "", dtype=object)
+
+    if cancer:
+        # A cancer panel is adult and older, and the age mix differs by site.
+        child = np.zeros(n, dtype=bool)
+        age = np.clip(rng.normal(site_lookup(site, "age"), 12.5, n), 22, 104)
+    else:
+        # Ambulatory panels skew adult and female; a small tail sits above the cap.
+        child = rng.random(n) < 0.17
+        age = np.where(child,
+                       np.clip(rng.normal(8, 5.5, n), 0, 17),
+                       np.clip(rng.normal(49, 20.5, n), 18, 104))
     true_birth_year = (EXTRACT_YEAR - age).astype("int64")
     capped_birth_year = np.maximum(true_birth_year, EXTRACT_YEAR - oldest)
     age_capped = true_birth_year < EXTRACT_YEAR - oldest
@@ -743,7 +1053,14 @@ def build_patients(cfg, rng, n, orgs):
     ethnicities = cfg.value_members(roles.ETHNICITY, [roles.ETHNICITY_NOT_HISPANIC,
                                                       roles.ETHNICITY_HISPANIC,
                                                       roles.ETHNICITY_UNKNOWN])
-    gender = pick(rng, list(genders.values()), n, p=[0.552, 0.438, 0.010])
+    if cancer:
+        # Sex follows the site: a female genital primary in a man is not a
+        # data-quality quirk to reproduce, it is an error.
+        female = rng.random(n) < site_lookup(site, "female")
+        gender = np.where(female, genders[roles.GENDER_FEMALE], genders[roles.GENDER_MALE])
+        gender = np.where(rng.random(n) < 0.006, genders[roles.GENDER_UNKNOWN], gender)
+    else:
+        gender = pick(rng, list(genders.values()), n, p=[0.552, 0.438, 0.010])
     race = pick(rng, list(races.values()), n, p=[0.66, 0.13, 0.045, 0.065, 0.10])
     ethnicity = pick(rng, list(ethnicities.values()), n, p=[0.79, 0.14, 0.07])
 
@@ -793,9 +1110,24 @@ def build_patients(cfg, rng, n, orgs):
 
     has_records = ~exact_mask(n, NO_RECORD_RATE, rng)
     onboard = orgs["onboard_day"].to_numpy()[home]
-    window_start = onboard + (rng.random(n) * np.maximum(EXTRACT_DAY - 30 - onboard, 1)).astype("int64")
-    duration = np.clip(rng.exponential(4.0 * YEAR, n), 0.05 * YEAR, 14 * YEAR).astype("int64")
+    room = np.maximum(EXTRACT_DAY - 30 - onboard, 1)
+    span = float(EXTRACT_DAY - START_DAY)
+    if cancer:
+        # A cancer survivor enters early and stays under surveillance, which is
+        # what makes a latency of one to three years observable at all.
+        window_start = onboard + (rng.random(n) ** 2.2 * room).astype("int64")
+        duration = np.clip(rng.exponential(7.0 * YEAR, n), 0.5 * YEAR, span).astype("int64")
+    else:
+        window_start = onboard + (rng.random(n) * room).astype("int64")
+        duration = np.clip(rng.exponential(4.0 * YEAR, n), 0.05 * YEAR,
+                           min(14 * YEAR, span)).astype("int64")
     window_end = np.minimum(window_start + duration, EXTRACT_DAY)
+
+    # How much this person engages with ambulatory care. It drives how often they
+    # are seen and, later, how likely each trace of a condition is to be written
+    # down -- so the traces are correlated with each other for a reason that has
+    # nothing to do with whether the condition is present.
+    engagement = rng.normal(0.0, 1.0, n)
 
     patients = pd.DataFrame({
         "person_id": person_id, "capped_birth_year": capped_birth_year,
@@ -804,9 +1136,94 @@ def build_patients(cfg, rng, n, orgs):
         "home_org_row": home, "height_in": height_in, "bmi0": bmi0,
         "bmi_slope": bmi_slope, "smoking": smoking, "has_records": has_records,
         "window_start": window_start, "window_end": window_end,
+        "engagement": engagement, "site_group": site,
     })
     for name in CONDITIONS:
         patients["cond_" + name] = conditions[name]
+    if cancer:
+        add_cancer_state(rng, patients)
+    return patients
+
+
+# --------------------------------------------------------------------------
+# the latent cancer and lymphedema state
+#
+# Nothing here is delivered. The extent of nodal surgery, whether the person was
+# irradiated, when treatment started and whether lymphedema ever developed are
+# all unobserved; the delivered tables carry only imperfect traces of them, and
+# ``_truth/`` carries these.
+# --------------------------------------------------------------------------
+
+# Onset runs 12 to 36 months after treatment, with a tail that runs longer.
+ONSET_MIN_DAYS, ONSET_MAX_DAYS = 365, 1095
+ONSET_LATE_SHARE, ONSET_LATE_MAX = 0.15, 1825
+
+# Log-odds of ever developing lymphedema. The nodal terms are the point of the
+# model: a full dissection carries roughly four times the risk of a sentinel
+# biopsy, which is the gradient the literature reports and the one an analysis
+# most wants back.
+RISK_INTERCEPT = -3.60
+RISK_SENTINEL = 0.70
+RISK_DISSECTION = RISK_SENTINEL + math.log(4.0)
+RISK_RADIATION = 0.50
+RISK_TAXANE = 0.30
+RISK_BMI = 0.055
+
+
+def add_cancer_state(rng, patients):
+    """Attach treatment and latent lymphedema columns to the patient frame."""
+    n = len(patients)
+    site = patients["site_group"].to_numpy()
+
+    # Nodal surgery. Someone can have the primary operation and no nodal
+    # procedure at all, which is the reference level for risk.
+    u = rng.random(n)
+    p_sentinel = site_lookup(site, "sentinel")
+    p_dissection = site_lookup(site, "dissection")
+    extent = np.where(u < p_dissection, EXTENT_DISSECTION,
+                      np.where(u < p_dissection + p_sentinel, EXTENT_SENTINEL, EXTENT_NONE))
+    sentinel = extent == EXTENT_SENTINEL
+    dissection = extent == EXTENT_DISSECTION
+    # Nodal surgery implies the primary operation; without it, most but not all
+    # of these people still had one.
+    had_surgery = (extent != EXTENT_NONE) | (rng.random(n) < site_lookup(site, "primary_only"))
+
+    radiation = rng.random(n) < site_lookup(site, "radiation")
+    taxane = rng.random(n) < site_lookup(site, "taxane")
+    endocrine = rng.random(n) < site_lookup(site, "endocrine")
+
+    # Treatment index date. Some people were treated before the window opened and
+    # enter as prevalent cases -- the left truncation the analysis plan warns
+    # about -- and the rest start treatment inside their own observation window.
+    start = patients["window_start"].to_numpy()
+    end = patients["window_end"].to_numpy()
+    prevalent = rng.random(n) < 0.45
+    index_day = np.where(
+        prevalent,
+        start - rng.integers(30, 1500, n),
+        start + (rng.random(n) * 0.15 * np.maximum(end - start, 1)).astype("int64"))
+
+    logit = (RISK_INTERCEPT
+             + RISK_SENTINEL * sentinel + RISK_DISSECTION * dissection
+             + RISK_RADIATION * radiation + RISK_TAXANE * taxane
+             + site_lookup(site, "risk")
+             + RISK_BMI * (patients["bmi0"].to_numpy() - 28.0))
+    lymphedema = rng.random(n) < 1.0 / (1.0 + np.exp(-logit))
+
+    latency = rng.integers(ONSET_MIN_DAYS, ONSET_MAX_DAYS + 1, n)
+    late = rng.random(n) < ONSET_LATE_SHARE
+    latency = np.where(late, rng.integers(ONSET_MAX_DAYS, ONSET_LATE_MAX + 1, n), latency)
+    onset_day = index_day + latency
+
+    patients["surgical_extent"] = extent
+    patients["had_surgery"] = had_surgery
+    patients["radiation"] = radiation
+    patients["taxane"] = taxane
+    patients["endocrine"] = endocrine
+    patients["prevalent_at_entry"] = prevalent
+    patients["index_day"] = index_day
+    patients["lymphedema"] = lymphedema
+    patients["onset_day"] = np.where(lymphedema, onset_day, 0)
     return patients
 
 
@@ -834,15 +1251,31 @@ VITAL_WEIGHT = {roles.ENCOUNTER_IN_PERSON: 1.0, roles.ENCOUNTER_REMOTE: 0.13,
                 roles.ENCOUNTER_IMPORTED: 0.30, roles.ENCOUNTER_INCIDENTAL: 0.08,
                 roles.ENCOUNTER_EMPTY: 0.015}
 
+# How strongly care engagement moves the encounter rate, and the log-odds of
+# each recorded signal. One person-level quantity feeding both is what makes the
+# signals dependent given the latent state.
+ENGAGEMENT_VISITS = 0.45
+ENGAGEMENT_SIGNAL = 0.85
 
-def build_visits(rng, patients, orgs, sample_practitioner):
-    """Encounter rows plus the latent vitals that de-identification censors."""
+# Cancer patients are heavier users of ambulatory care than a general panel.
+VISIT_RATE = {COHORT_CANCER: 4.4, COHORT_GENERAL: 3.2}
+
+
+def build_visits(rng, patients, orgs, sample_practitioner, visit_rate=3.2):
+    """Encounter rows plus the latent vitals that de-identification censors.
+
+    Encounter frequency scales with the person's care engagement, which is the
+    same quantity that later drives how readily a condition gets written down.
+    """
     have = np.flatnonzero(patients["has_records"].to_numpy())
     start = patients["window_start"].to_numpy()[have]
     end = patients["window_end"].to_numpy()[have]
     years = np.maximum(end - start, 1) / YEAR
 
-    n_cand = rng.poisson(3.2 * years) + 1
+    # Scaled so the average rate stays at ``visit_rate`` however wide the spread.
+    engaged = np.exp(ENGAGEMENT_VISITS * patients["engagement"].to_numpy()[have]
+                     - 0.5 * ENGAGEMENT_VISITS ** 2)
+    n_cand = rng.poisson(visit_rate * years * engaged) + 1
     pos = np.repeat(np.arange(have.size), n_cand)
     day = start[pos] + (rng.random(pos.size) * np.maximum(end - start, 1)[pos]).astype("int64")
 
@@ -957,6 +1390,305 @@ def build_mortality(cfg, rng, patients, deceased, true_death_day):
         "delivered_death_date": as_date(shifted),
     })
     return frame, truth
+
+
+# --------------------------------------------------------------------------
+# placing oncology content on the encounter stream
+# --------------------------------------------------------------------------
+
+class VisitIndex:
+    """Per-person view of the encounter stream, for placing content in time.
+
+    Encounters arrive grouped by person and ordered by date, so one composite
+    key makes "this person's first encounter on or after day D" a binary search
+    rather than a loop over people.
+    """
+
+    KEY_SCALE = 1_000_000  # comfortably larger than any day number
+
+    def __init__(self, visits, n_patients):
+        self.patient_row = visits["patient_row"].to_numpy()
+        self.day = visits["encounter_day"].to_numpy()
+        self.size = self.patient_row.size
+        self.key = self.patient_row.astype("int64") * self.KEY_SCALE + self.day
+        keys = np.arange(n_patients)
+        self.start = np.searchsorted(self.patient_row, keys, side="left")
+        self.stop = np.searchsorted(self.patient_row, keys, side="right")
+
+    def first_on_or_after(self, patient_rows, day):
+        """Row of each person's first encounter at or after ``day``.
+
+        Returns the person's block end where they have no such encounter, which
+        callers test with ``stop``.
+        """
+        patient_rows = np.asarray(patient_rows)
+        probe = patient_rows.astype("int64") * self.KEY_SCALE + np.asarray(day)
+        found = np.searchsorted(self.key, probe, side="left")
+        return np.minimum(found, self.stop[patient_rows])
+
+    def rank_within_person(self, mask):
+        """Position of each selected row among that person's selected rows."""
+        rows = np.flatnonzero(mask)
+        owner = self.patient_row[rows]
+        return rows, np.arange(rows.size) - np.searchsorted(owner, owner, side="left")
+
+    def choose(self, rng, eligible, repeat_rate, minimum=1):
+        """Rows carrying a record: the first few eligible ones, plus repeats."""
+        chosen = eligible & (rng.random(self.size) < repeat_rate)
+        rows, rank = self.rank_within_person(eligible)
+        floor = np.asarray(minimum)
+        chosen[rows[rank < (floor[self.patient_row[rows]] if floor.ndim else floor)]] = True
+        return np.flatnonzero(chosen)
+
+
+def logistic(x):
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+# Log-odds that each trace is recorded, for people who have lymphedema and for
+# people who do not. Every one of them is a poor test on its own, and the
+# engagement term they share is what makes them dependent given the state.
+SIGNAL_LOGIT = {
+    SIGNAL_DIAGNOSIS: (-1.00, -4.60),
+    SIGNAL_REFERRAL: (-1.00, -2.60),
+    SIGNAL_GARMENT: (-1.30, -5.20),
+    SIGNAL_THERAPY: (-1.45, -3.40),
+    SIGNAL_CELLULITIS: (-1.55, -4.00),
+}
+# The breast presentation has a diagnosis code of its own; every other site
+# falls back to the non-specific one and is correspondingly harder to see.
+DIAGNOSIS_BREAST_BONUS = 1.30
+# Hereditary disease, given only to people without the treatment-related state.
+HEREDITARY_RATE = 0.004
+
+
+def build_oncology(rng, patients, visits):
+    """Map each person's latent cancer and lymphedema state onto their encounters.
+
+    Returns per-table blocks of extra rows -- which encounter each belongs to and
+    what it says -- plus the truth frame. Nothing here writes a delivered column;
+    the emitters do that, so the extra rows go through exactly the same
+    completeness machinery as everything else.
+    """
+    n_p = len(patients)
+    index = VisitIndex(visits, n_p)
+    owner = index.patient_row
+    day = index.day
+
+    site = patients["site_group"].to_numpy()
+    engagement = patients["engagement"].to_numpy()
+    index_day = patients["index_day"].to_numpy()
+    onset_day = patients["onset_day"].to_numpy()
+    lymphedema = patients["lymphedema"].to_numpy()
+    extent = patients["surgical_extent"].to_numpy()
+    window_start = patients["window_start"].to_numpy()
+
+    conditions = {"rows": [], "code": [], "name": [], "chronic": []}
+    background = {"rows": [], "category": [], "name": [], "code": []}
+    drugs = {"rows": [], "drug": [], "action": []}
+    procedures = {"rows": [], "name": [], "cpt": [], "category": []}
+    referrals = {"rows": [], "name": []}
+
+    def add_condition(rows, code, name, chronic=True):
+        conditions["rows"].append(rows)
+        conditions["code"].append(np.asarray(code, dtype=object))
+        conditions["name"].append(np.asarray(name, dtype=object))
+        conditions["chronic"].append(np.full(rows.size, chronic, dtype=bool))
+
+    def add_background(rows, category, name, code=None):
+        background["rows"].append(rows)
+        background["category"].append(np.asarray(category, dtype=object))
+        background["name"].append(np.asarray(name, dtype=object))
+        background["code"].append(np.full(rows.size, None, dtype=object)
+                                  if code is None else np.asarray(code, dtype=object))
+
+    def add_drug(rows, catalog_row, action_role):
+        drugs["rows"].append(rows)
+        drugs["drug"].append(np.asarray(catalog_row, dtype="int64"))
+        drugs["action"].append(np.full(rows.size, action_role, dtype=object))
+
+    def add_procedure(rows, name, cpt, category):
+        procedures["rows"].append(rows)
+        procedures["name"].append(np.asarray(name, dtype=object))
+        procedures["cpt"].append(np.asarray(cpt, dtype=object))
+        procedures["category"].append(np.asarray(category, dtype=object))
+
+    def add_referral(rows, name):
+        referrals["rows"].append(rows)
+        referrals["name"].append(np.asarray(name, dtype=object))
+
+    def from_catalog(rows, table, field=None):
+        """One entry per row, drawn from that person's site-specific catalog.
+
+        ``field`` may vary by row, which is how the two kinds of nodal surgery
+        are drawn in one pass.
+        """
+        owners = site[owner[rows]]
+        draw = rng.random(rows.size)
+        keys = [field] * rows.size if isinstance(field, (str, type(None))) else list(field)
+        out = np.empty(rows.size, dtype=object)
+        for position, (name, key, value) in enumerate(zip(owners, keys, draw)):
+            options = table[name] if key is None else table[name][key]
+            out[position] = options[min(int(value * len(options)), len(options) - 1)]
+        return out
+
+    # ---- the malignancy itself -------------------------------------------
+    # Everyone with an encounter carries one. Where the whole record predates
+    # treatment, the last encounter takes it, so nobody is left uncoded.
+    eligible = day >= index_day[owner] - 90
+    rows = index.choose(rng, eligible, 0.20)
+    covered = np.zeros(n_p, dtype=bool)
+    covered[owner[rows]] = True
+    missing = ~covered & (index.stop > index.start)
+    rows = np.sort(np.concatenate([rows, index.stop[missing] - 1]))
+    pairs = from_catalog(rows, SITE_MALIGNANCY)
+    add_condition(rows, [p[0] for p in pairs], [p[1] for p in pairs])
+
+    # ---- the operation, as free text in the background table --------------
+    # Its date is another matter: the date column is sparsely populated across
+    # the whole table, and these rows get no special treatment, so for most
+    # people the record says an operation happened and not when.
+    surgery_row = index.first_on_or_after(np.arange(n_p), index_day + 21)
+    recorded = (surgery_row < index.stop) & patients["had_surgery"].to_numpy()
+    rows = surgery_row[recorded]
+    surgery_categories = (roles.BACKGROUND_SURGERY, roles.BACKGROUND_SURGERY_VARIANT)
+    history_code = np.array([SITE_HISTORY_CODE[s] for s in site[owner[rows]]], dtype=object)
+    add_background(rows, pick(rng, surgery_categories, rows.size),
+                   from_catalog(rows, SITE_SURGERY, "primary"),
+                   np.where(rng.random(rows.size) < 0.35, history_code, None))
+
+    nodal = (surgery_row < index.stop) & (extent != EXTENT_NONE)
+    rows = surgery_row[nodal]
+    add_background(rows, pick(rng, surgery_categories, rows.size),
+                   from_catalog(rows, SITE_SURGERY, extent[owner[rows]]))
+
+    # ---- radiation, which ambulatory practice almost never sees -----------
+    seen = patients["radiation"].to_numpy() & (rng.random(n_p) < RADIATION_VISIBILITY)
+    rows = surgery_row[seen & (surgery_row < index.stop)]
+    add_background(rows, pick(rng, surgery_categories, rows.size),
+                   pick(rng, RADIATION_TEXT, rows.size))
+
+    # ---- adjuvant endocrine therapy, refilled for years -------------------
+    therapy_start = index_day + rng.integers(30, 181, n_p)
+    agent = ENDOCRINE_OFFSET + rng.integers(0, len(ENDOCRINE_DRUGS), n_p)
+    on_therapy = (patients["endocrine"].to_numpy()[owner]
+                  & (day >= therapy_start[owner])
+                  & (day <= therapy_start[owner] + int(5 * YEAR)))
+    rows = index.choose(rng, on_therapy, 0.55)
+    switched = rng.random(rows.size) < 0.12
+    catalog_row = np.where(switched,
+                           ENDOCRINE_OFFSET + rng.integers(0, len(ENDOCRINE_DRUGS), rows.size),
+                           agent[owner[rows]])
+    add_drug(rows, catalog_row, roles.ACTIVITY_PRESCRIPTION)
+
+    # ---- taxane chemotherapy, over a few months around treatment ----------
+    on_taxane = (patients["taxane"].to_numpy()[owner]
+                 & (day >= index_day[owner] - 30) & (day <= index_day[owner] + 200))
+    rows = index.choose(rng, on_taxane, 0.45)
+    add_drug(rows, TAXANE_OFFSET + rng.integers(0, len(TAXANE_DRUGS), rows.size),
+             roles.ACTIVITY_ADMINISTRATION)
+
+    # ---- the five traces of the latent state ------------------------------
+    # Care engagement shifts every one of them in the same direction for the
+    # same person, so two traces agree more often than their separate rates
+    # would predict even after conditioning on the state.
+    shared = ENGAGEMENT_SIGNAL * engagement
+    breast = site == SITE_BREAST
+
+    def observed(signal, bonus=0.0):
+        positive, negative = SIGNAL_LOGIT[signal]
+        return rng.random(n_p) < logistic(
+            np.where(lymphedema, positive + bonus, negative) + shared)
+
+    # Records can only appear at an encounter after onset.
+    from_day = np.where(lymphedema, onset_day, window_start)
+    after_onset = day >= from_day[owner]
+
+    # 1. diagnosis codes
+    flagged = observed(SIGNAL_DIAGNOSIS, DIAGNOSIS_BREAST_BONUS * breast)
+    rows = index.choose(rng, flagged[owner] & after_onset, 0.35)
+    specific = breast & patients["had_surgery"].to_numpy() & lymphedema
+    code = np.where(specific[owner[rows]], LYMPHEDEMA_POSTMASTECTOMY[0],
+                    LYMPHEDEMA_UNSPECIFIED[0])
+    name = np.where(specific[owner[rows]], LYMPHEDEMA_POSTMASTECTOMY[1],
+                    LYMPHEDEMA_UNSPECIFIED[1])
+    add_condition(rows, code, name)
+
+    hereditary = ~lymphedema & (rng.random(n_p) < HEREDITARY_RATE)
+    rows = index.choose(rng, hereditary[owner], 0.25)
+    add_condition(rows, np.full(rows.size, LYMPHEDEMA_HEREDITARY[0], dtype=object),
+                  np.full(rows.size, LYMPHEDEMA_HEREDITARY[1], dtype=object))
+
+    # 2. therapy referrals
+    flagged = observed(SIGNAL_REFERRAL)
+    rows = index.choose(rng, flagged[owner] & after_onset, 0.30)
+    named = (lymphedema[owner[rows]]) & (rng.random(rows.size) < 0.45)
+    add_referral(rows, np.where(named, pick(rng, LYMPHEDEMA_REFERRALS, rows.size),
+                                pick(rng, REHAB_REFERRALS, rows.size)))
+
+    # 3. compression garments and pumps, as durable medical equipment
+    flagged = observed(SIGNAL_GARMENT)
+    rows = index.choose(rng, flagged[owner] & after_onset, 0.28)
+    treated = lymphedema[owner[rows]]
+    pumped = treated & (rng.random(rows.size) < 0.22)
+    supply = np.where(treated, pick(rng, COMPRESSION_GARMENTS, rows.size),
+                      pick(rng, VENOUS_STOCKINGS, rows.size))
+    supply = np.where(pumped, pick(rng, COMPRESSION_PUMPS, rows.size), supply)
+    add_background(rows, np.full(rows.size, roles.BACKGROUND_DEVICE, dtype=object), supply)
+
+    # 4. manual therapy and bioimpedance. People without the state can only
+    #    reach the entry that ordinary musculoskeletal manual therapy shares.
+    flagged = observed(SIGNAL_THERAPY)
+    rows = index.choose(rng, flagged[owner] & after_onset, 0.40)
+    manual = rng.random(rows.size) < 0.72
+    catalog = np.where(manual, rng.integers(0, SHARED_MANUAL_THERAPY + 1, rows.size),
+                       rng.integers(SHARED_MANUAL_THERAPY + 1, len(LYMPHEDEMA_THERAPY),
+                                    rows.size))
+    catalog = np.where(lymphedema[owner[rows]], catalog, SHARED_MANUAL_THERAPY)
+    add_procedure(rows, [LYMPHEDEMA_THERAPY[i][0] for i in catalog],
+                  [LYMPHEDEMA_THERAPY[i][1] for i in catalog],
+                  [LYMPHEDEMA_THERAPY[i][2] for i in catalog])
+
+    # 5. recurrent limb cellulitis, with the antibiotics that treat it
+    flagged = observed(SIGNAL_CELLULITIS)
+    episodes = np.where(lymphedema, 2, 1)
+    rows = index.choose(rng, flagged[owner] & after_onset, 0.20, minimum=episodes)
+    add_condition(rows, np.full(rows.size, LIMB_CELLULITIS[0], dtype=object),
+                  np.full(rows.size, LIMB_CELLULITIS[1], dtype=object), chronic=False)
+    courses = np.repeat(rows, 1 + (rng.random(rows.size) < 0.3))
+    add_drug(courses,
+             CELLULITIS_OFFSET + rng.integers(0, len(CELLULITIS_DRUGS), courses.size),
+             roles.ACTIVITY_PRESCRIPTION)
+
+    def stack(block):
+        return {key: (np.concatenate(values) if values
+                      else np.array([], dtype="int64" if key == "rows" else object))
+                for key, values in block.items()}
+
+    extras = {
+        roles.CONDITION: stack(conditions),
+        roles.CLINICAL_BACKGROUND: stack(background),
+        roles.DRUG_EXPOSURE: stack(drugs),
+        roles.INTERVENTION: stack(procedures),
+        roles.SERVICE_REQUEST: stack(referrals),
+    }
+    truth = pd.DataFrame({
+        "person_id": patients["person_id"].to_numpy(),
+        "site_group": site,
+        "true_lymphedema": lymphedema,
+        "true_onset_date": as_date(np.where(lymphedema, onset_day, 0)),
+        "true_surgical_extent": extent,
+        "true_index_date": as_date(index_day),
+        "true_had_surgery": patients["had_surgery"].to_numpy(),
+        "true_radiation": patients["radiation"].to_numpy(),
+        "true_taxane": patients["taxane"].to_numpy(),
+        "true_endocrine_therapy": patients["endocrine"].to_numpy(),
+        "prevalent_at_entry": patients["prevalent_at_entry"].to_numpy(),
+        "care_engagement": engagement.round(4),
+        "hereditary_lymphedema": hereditary,
+    })
+    truth.loc[~lymphedema, "true_onset_date"] = pd.NaT
+    return extras, truth
 
 
 # --------------------------------------------------------------------------
@@ -1198,14 +1930,18 @@ def emit_lab(cfg, rng, visits, rows, patients):
     return frame, patient_row
 
 
-def emit_medication(cfg, rng, visits, rows, patients, prescription_actions, activity_types):
+def emit_medication(cfg, rng, visits, rows, patients, prescription_actions, activity_types,
+                    extra=None):
     f = cfg.fields(roles.DRUG_EXPOSURE)
+    rows, n_extra = append_rows(rows, extra)
     n = rows.size
     day = visits["encounter_day"].to_numpy()[rows]
     patient_row = visits["patient_row"].to_numpy()[rows]
 
     # Prefer drugs that match the person's conditions; fall back to anything.
-    drug_class = np.array([d[7] for d in DRUG_CATALOG], dtype=object)
+    # The draw is confined to the general catalog, so the oncology entries that
+    # sit behind it are reached only by the rows that ask for them.
+    drug_class = np.array([d[7] for d in FULL_DRUG_CATALOG], dtype=object)
     idx = rng.integers(0, len(DRUG_CATALOG), size=n)
     for _ in range(3):
         cls = drug_class[idx]
@@ -1215,12 +1951,33 @@ def emit_medication(cfg, rng, visits, rows, patients, prescription_actions, acti
         ok |= (cls == "glp1") & (patients["cond_diabetes"].to_numpy()[patient_row]
                                  | patients["cond_obesity"].to_numpy()[patient_row])
         idx = np.where(ok, idx, rng.integers(0, len(DRUG_CATALOG), size=n))
+    if n_extra:
+        idx[-n_extra:] = extra["drug"]
 
     def col(pos):
-        return np.array([d[pos] for d in DRUG_CATALOG], dtype=object)[idx]
+        return np.array([d[pos] for d in FULL_DRUG_CATALOG], dtype=object)[idx]
 
     action = pick(rng, activity_types, n, p=[0.13, 0.05, 0.52, 0.30])
+    if n_extra:
+        action[-n_extra:] = [cfg.value_member(roles.ACTIVITY_TYPE, role)
+                             for role in extra["action"]]
     quantity = pick(rng, ["30", "60", "90", "1", "12", "20", "100"], n)
+    duration = pick(rng, [10, 14, 30, 60, 90], n).astype("int64")
+    refills = pick(rng, [0, 1, 2, 3, 5, 11], n,
+                   p=[0.30, 0.15, 0.15, 0.20, 0.15, 0.05]).astype("int64")
+
+    # Adjuvant endocrine therapy is dispensed a month or a quarter at a time and
+    # refilled for years; an antibiotic course is a week or ten days and is not.
+    kind = drug_class[idx]
+    long_term = kind == "endocrine"
+    course = kind == "cellulitis"
+    quantity = np.where(long_term, pick(rng, ["30", "90"], n), quantity)
+    quantity = np.where(course, pick(rng, ["14", "20", "21"], n), quantity)
+    duration = np.where(long_term, pick(rng, [30, 90], n), duration)
+    duration = np.where(course, pick(rng, [7, 10, 14], n), duration)
+    refills = np.where(long_term, pick(rng, [1, 3, 5, 11], n), refills)
+    refills = np.where(course, 0, refills)
+
     data = {
         f.drug_exposure_id: np.arange(1, n + 1, dtype="int64") + 40_000_000,
         f.organization_id: visits["organization_id"].to_numpy()[rows],
@@ -1243,8 +2000,8 @@ def emit_medication(cfg, rng, visits, rows, patients, prescription_actions, acti
         f.frequency: pick(rng, DRUG_FREQUENCY, n),
         f.daily_frequency: pick(rng, ["1", "2", "3", "4"], n, p=[0.55, 0.30, 0.10, 0.05]),
         f.daily_amount: pick(rng, ["1", "2", "4"], n),
-        f.duration_days: pick(rng, [10, 14, 30, 60, 90], n).astype("int64"),
-        f.refills: pick(rng, [0, 1, 2, 3, 5, 11], n, p=[0.30, 0.15, 0.15, 0.20, 0.15, 0.05]).astype("int64"),
+        f.duration_days: duration.astype("int64"),
+        f.refills: refills.astype("int64"),
         f.dispense_as_written_flag: rng.random(n) < 0.11,
         f.over_the_counter_flag: np.array([c == "otc" for c in drug_class[idx]]),
         f.electronic_order_flag: rng.random(n) < 0.72,
@@ -1269,12 +2026,27 @@ def emit_medication(cfg, rng, visits, rows, patients, prescription_actions, acti
         f.over_the_counter_flag: np.where(data[f.over_the_counter_flag], 1.0, 0.02),
         f.sig: np.where(ordered, 1.0, 0.2),
     }
+    if n_extra:
+        # A cancer drug is the kind of prescription a practice codes properly,
+        # so its identifiers survive more often than the average row's.
+        named = np.ones(n)
+        named[-n_extra:] = 4.0
+        for field in (f.drug_name, f.ndc, f.rxnorm_code):
+            weights[field] = named
     return (apply_fill(frame, cfg.field_specs(roles.DRUG_EXPOSURE), rng, weights=weights),
             patient_row)
 
 
-def emit_problem(cfg, rng, visits, rows, patients):
+def append_rows(rows, extra):
+    """Encounter rows for a table: the generated ones, then any oncology block."""
+    if extra is None or not extra["rows"].size:
+        return rows, 0
+    return np.concatenate([rows, extra["rows"]]), extra["rows"].size
+
+
+def emit_problem(cfg, rng, visits, rows, patients, extra=None):
     f = cfg.fields(roles.CONDITION)
+    rows, n_extra = append_rows(rows, extra)
     n = rows.size
     day = visits["encounter_day"].to_numpy()[rows]
     patient_row = visits["patient_row"].to_numpy()[rows]
@@ -1300,8 +2072,16 @@ def emit_problem(cfg, rng, visits, rows, patients):
         name[sel] = pick(rng, names, sel.sum())
     code = np.where(use_chronic, code, acute_code[pick_acute])
     name = np.where(use_chronic, name, acute_name[pick_acute])
+    if n_extra:
+        code[-n_extra:] = extra["code"]
+        name[-n_extra:] = extra["name"]
+        use_chronic[-n_extra:] = extra["chronic"]
 
     onset = day - np.where(use_chronic, rng.integers(0, 3000, n), rng.integers(0, 30, n))
+    if n_extra:
+        # Oncology problems are entered close to the visit that recorded them,
+        # not backdated by years the way a long-standing chronic problem is.
+        onset[-n_extra:] = day[-n_extra:] - rng.integers(0, 240, n_extra)
     data = {
         f.condition_id: np.arange(1, n + 1, dtype="int64") + 50_000_000,
         f.organization_id: visits["organization_id"].to_numpy()[rows],
@@ -1320,21 +2100,26 @@ def emit_problem(cfg, rng, visits, rows, patients):
     return frame, patient_row, code
 
 
-def emit_problem_code(cfg, rng, problems, problem_codes, histories):
+def emit_problem_code(cfg, rng, problems, problem_codes, histories, history_codes,
+                      n_oncology=0):
     """One code row per condition (sometimes two) plus a background-linked minority.
 
     Exactly one of the two parent links is populated per row, and the split
-    reproduces the two documented fill rates.
+    reproduces the two documented fill rates. Only background entries whose text
+    supports a code are eligible for the second link, so a coded diagnosis never
+    contradicts the entry it hangs off.
     """
     f = cfg.fields(roles.CONDITION_CODE)
     n_prob = len(problems)
-    extra = exact_mask(n_prob, 0.14, rng)
-    prob_pos = np.concatenate([np.arange(n_prob), np.flatnonzero(extra)])
+    repeated = exact_mask(n_prob, 0.14, rng)
+    prob_pos = np.concatenate([np.arange(n_prob), np.flatnonzero(repeated)])
     n_linked = prob_pos.size
     n_hist = int(round(n_linked * cfg.fill_rate(roles.CONDITION_CODE, "background_id")
                        / cfg.fill_rate(roles.CONDITION_CODE, "condition_id")))
-    n_hist = min(n_hist, len(histories))
-    hist_pos = rng.choice(len(histories), size=n_hist, replace=False) if n_hist else np.array([], dtype="int64")
+    codeable = np.flatnonzero(np.array([c is not None for c in history_codes]))
+    n_hist = min(n_hist, codeable.size)
+    hist_pos = rng.choice(codeable, size=n_hist, replace=False) if n_hist \
+        else np.array([], dtype="int64")
 
     n = n_linked + n_hist
     condition_id = np.concatenate([problems[cfg.field(roles.CONDITION, "condition_id")]
@@ -1344,8 +2129,18 @@ def emit_problem_code(cfg, rng, problems, problem_codes, histories):
         histories[cfg.field(roles.CLINICAL_BACKGROUND, "background_id")].to_numpy()[hist_pos]])
     link_is_condition = np.concatenate([np.ones(n_linked, bool), np.zeros(n_hist, bool)])
 
-    icd10 = np.concatenate([problem_codes[prob_pos], pick(rng, ["Z87.891", "Z72.0", "F17.210"], n_hist)])
-    kind = categorical(rng, np.tile([0.83, 0.05, 0.10, 0.02], (n, 1)))
+    icd10 = np.concatenate([problem_codes[prob_pos],
+                            np.asarray(history_codes, dtype=object)[hist_pos]])
+    # Most rows carry the ICD-10 code; a minority carry the same problem coded in
+    # another vocabulary instead. A cancer or lymphedema problem is close to
+    # always coded in ICD-10, so it survives that mixture where a general
+    # problem-list entry sometimes does not.
+    mixture = np.tile([0.83, 0.05, 0.10, 0.02], (n, 1))
+    if n_oncology:
+        oncology = np.concatenate([(prob_pos >= len(problems) - n_oncology),
+                                   np.zeros(n_hist, dtype=bool)])
+        mixture[oncology] = [0.98, 0.005, 0.010, 0.005]
+    kind = categorical(rng, mixture)
     code = np.where(kind == 0, icd10, pick(rng, SNOMED_CONDITION_CODES, n))
     code = np.where(kind == 1, pick(rng, ICD9_CODES, n), code)
     code = np.where(kind == 3, pick(rng, CPT_CONDITION_CODES, n), code)
@@ -1371,16 +2166,23 @@ def emit_problem_code(cfg, rng, problems, problem_codes, histories):
                       preset=[f.condition_id, f.background_id])
 
 
-def emit_history(cfg, rng, visits, patients, smoking_categories, other_categories):
-    """Background rows, including the smoking-status mess the dictionary describes.
+def emit_history(cfg, rng, visits, patients, smoking_categories, extra=None):
+    """Background rows: a category and the free text filed under it, drawn together.
 
-    Many background categories are annotated as being used for smoking-status
-    documentation, and the status itself lives in the free-text name. Recovering
-    a person's smoking status therefore means parsing that text.
+    Many categories are documented as carrying smoking status, and the status
+    itself lives in the free text, so recovering it means parsing that text
+    within those categories. What each entry says and where it is filed are
+    drawn as one choice, so no entry contradicts its own category -- the
+    redundancy of the real data survives, the incoherence does not.
+
+    The array returned alongside the frame gives the coded diagnosis each entry
+    could legitimately carry, or nothing where no code applies; it is what keeps
+    the coded rows that hang off this table coherent as well.
     """
     f = cfg.fields(roles.CLINICAL_BACKGROUND)
-    n = max(1, int(len(visits) * 0.32))
-    rows = rng.choice(len(visits), size=n)
+    n_base = max(1, int(len(visits) * 0.32))
+    rows, n_extra = append_rows(rng.choice(len(visits), size=n_base), extra)
+    n = rows.size
     day = visits["encounter_day"].to_numpy()[rows]
     patient_row = visits["patient_row"].to_numpy()[rows]
     smoking_truth = patients["smoking"].to_numpy()[patient_row]
@@ -1388,25 +2190,39 @@ def emit_history(cfg, rng, visits, patients, smoking_categories, other_categorie
     is_smoking = rng.random(n) < 0.45
     smoke_text = np.array([SMOKING_TEXT[s][rng.integers(len(SMOKING_TEXT[s]))]
                            for s in smoking_truth], dtype=object)
+    smoke_code = np.array(
+        [rng.choice(SMOKING_HISTORY_CODES[s]) if s in SMOKING_HISTORY_CODES else None
+         for s in smoking_truth], dtype=object)
 
     category_names = cfg.value_members(roles.BACKGROUND_CATEGORY)
-    other_idx = rng.integers(0, len(NONSMOKING_BACKGROUND), size=n)
-    other_cat = np.array([category_names[NONSMOKING_BACKGROUND[i][0]] for i in other_idx],
-                         dtype=object)
-    other_name = np.array([NONSMOKING_BACKGROUND[i][1][rng.integers(len(NONSMOKING_BACKGROUND[i][1]))]
-                           for i in other_idx], dtype=object)
+    share = np.array([c[0] for c in BACKGROUND_CONCEPTS], dtype="float64")
+    concept = rng.choice(len(BACKGROUND_CONCEPTS), size=n, p=share / share.sum())
+    spread = rng.random((n, 2))
+    other_cat = np.array(
+        [category_names[BACKGROUND_CONCEPTS[c][1][int(u * len(BACKGROUND_CONCEPTS[c][1]))]]
+         for c, u in zip(concept, spread[:, 0])], dtype=object)
+    other_name = np.array(
+        [BACKGROUND_CONCEPTS[c][2][int(u * len(BACKGROUND_CONCEPTS[c][2]))]
+         for c, u in zip(concept, spread[:, 1])], dtype=object)
 
-    # A minority of non-smoking rows use the other dictionary categories verbatim.
-    other_cat = np.where(rng.random(n) < 0.20, pick(rng, other_categories, n), other_cat)
     category = np.where(is_smoking, pick(rng, smoking_categories, n), other_cat)
     name = np.where(is_smoking, smoke_text, other_name)
+    code = np.where(is_smoking, smoke_code, None)
+    # An operation or a supply is entered close to when it happened -- on the
+    # rare row where the date is filled in at all.
+    began = day - rng.integers(0, 4000, n)
+    if n_extra:
+        category[-n_extra:] = [category_names[role] for role in extra["category"]]
+        name[-n_extra:] = extra["name"]
+        code[-n_extra:] = extra["code"]
+        began[-n_extra:] = day[-n_extra:] - rng.integers(0, 400, n_extra)
 
     data = {
         f.background_id: np.arange(1, n + 1, dtype="int64") + 70_000_000,
         f.organization_id: visits["organization_id"].to_numpy()[rows],
         f.practitioner_id: visits["practitioner_id"].to_numpy()[rows],
         f.person_id: visits["person_id"].to_numpy()[rows],
-        f.begin_date: as_datetime(day - rng.integers(0, 4000, n), rng),
+        f.begin_date: as_datetime(began, rng),
         f.end_date: as_datetime(day, rng),
         f.background_name: name, f.background_category: category,
         f.negation_flag: rng.random(n) < 0.5,
@@ -1415,11 +2231,12 @@ def emit_history(cfg, rng, visits, patients, smoking_categories, other_categorie
     data[f.record_created], data[f.record_updated] = created, updated
     frame = finalize(cfg, roles.CLINICAL_BACKGROUND, data, n)
     frame = apply_fill(frame, cfg.field_specs(roles.CLINICAL_BACKGROUND), rng)
-    return frame, patient_row
+    return frame, patient_row, code
 
 
-def emit_procedure(cfg, rng, visits, rows, intervention_categories):
+def emit_procedure(cfg, rng, visits, rows, intervention_categories, extra=None):
     f = cfg.fields(roles.INTERVENTION)
+    rows, n_extra = append_rows(rows, extra)
     n = rows.size
     day = visits["encounter_day"].to_numpy()[rows]
     idx = rng.integers(0, len(INTERVENTIONS), size=n)
@@ -1428,6 +2245,10 @@ def emit_procedure(cfg, rng, visits, rows, intervention_categories):
     category_names = cfg.value_members(roles.INTERVENTION_CATEGORY)
     category = np.array([category_names[p[2]] for p in INTERVENTIONS], dtype=object)[idx]
     category = np.where(rng.random(n) < 0.15, pick(rng, intervention_categories, n), category)
+    if n_extra:
+        name[-n_extra:] = extra["name"]
+        cpt[-n_extra:] = extra["cpt"]
+        category[-n_extra:] = [category_names[role] for role in extra["category"]]
 
     data = {
         f.intervention_id: np.arange(1, n + 1, dtype="int64") + 80_000_000,
@@ -1452,22 +2273,33 @@ def emit_procedure(cfg, rng, visits, rows, intervention_categories):
     created, updated = admin_dates(day, rng, (0, 2), (0, 400))
     data[f.record_created], data[f.record_updated] = created, updated
     frame = finalize(cfg, roles.INTERVENTION, data, n)
-    frame = apply_fill(frame, cfg.field_specs(roles.INTERVENTION), rng)
+    weights = {}
+    if n_extra:
+        # A billed therapy session carries its procedure code; an imaging study
+        # ordered and never resulted often does not.
+        coded = np.ones(n)
+        coded[-n_extra:] = 6.0
+        weights = {f.cpt: coded, f.intervention_name: coded}
+    frame = apply_fill(frame, cfg.field_specs(roles.INTERVENTION), rng, weights=weights)
     return frame, visits["patient_row"].to_numpy()[rows]
 
 
-def emit_referral(cfg, rng, visits):
+def emit_referral(cfg, rng, visits, extra=None):
     f = cfg.fields(roles.SERVICE_REQUEST)
-    n = max(1, int(len(visits) * 0.18))
-    rows = rng.choice(len(visits), size=n)
+    n_base = max(1, int(len(visits) * 0.18))
+    rows, n_extra = append_rows(rng.choice(len(visits), size=n_base), extra)
+    n = rows.size
     day = visits["encounter_day"].to_numpy()[rows]
+    service = pick(rng, SERVICE_REQUEST_NAMES, n)
+    if n_extra:
+        service[-n_extra:] = extra["name"]
     data = {
         f.service_request_id: np.arange(1, n + 1, dtype="int64") + 90_000_000,
         f.organization_id: visits["organization_id"].to_numpy()[rows],
         f.practitioner_id: visits["practitioner_id"].to_numpy()[rows],
         f.person_id: visits["person_id"].to_numpy()[rows],
         f.completion_date: as_datetime(day + rng.integers(1, 120, n), rng),
-        f.service_request_name: pick(rng, SERVICE_REQUEST_NAMES, n),
+        f.service_request_name: service,
         f.snomed: pick(rng, ["306253008", "183856001", "306110002"], n),
         f.cpt: pick(rng, ["99242", "99243", "99244"], n),
         f.hcpcs: pick(rng, ["S0620", "G0463"], n),
@@ -1813,26 +2645,28 @@ def fill_report(tables, cfg, tolerance=3.0):
 # driver
 # --------------------------------------------------------------------------
 
-def simulate(n_patients, seed, cfg):
+def simulate(n_patients, seed, cfg, cohort=COHORT_CANCER):
     rng = np.random.default_rng(seed)
     tables, truth = {}, {}
+    extras = {}
 
-    orgs = build_organizations(cfg, rng, n_patients)
+    orgs = build_organizations(cfg, rng, n_patients, cohort)
     practitioners = build_practitioners(cfg, rng, orgs)
     sample_practitioner, practitioners = practitioner_sampler(practitioners, orgs)
-    patients = build_patients(cfg, rng, n_patients, orgs)
+    patients = build_patients(cfg, rng, n_patients, orgs, cohort)
 
-    visits = build_visits(rng, patients, orgs, sample_practitioner)
+    visits = build_visits(rng, patients, orgs, sample_practitioner, VISIT_RATE[cohort])
     deceased, true_death_day = assign_deaths(rng, patients, visits)
     visits = truncate_at_death(visits, deceased, true_death_day)
+
+    if cohort == COHORT_CANCER:
+        extras, truth["lymphedema"] = build_oncology(rng, patients, visits)
 
     finding_cat = value_set(cfg, roles.FINDING_CATEGORY)
     intervention_cat = value_set(cfg, roles.INTERVENTION_CATEGORY)
     background_cat = cfg.value_set(roles.BACKGROUND_CATEGORY)
     smoking_cat = [v["value"] for v in background_cat if v["value"] != cfg.null_marker
                    and "smoking status" in (v["definition"] or "").lower()]
-    other_cat = [v["value"] for v in background_cat
-                 if v["value"] != cfg.null_marker and v["value"] not in smoking_cat]
     prescription_actions = value_set(cfg, roles.PRESCRIPTION_ACTION)
     activity_types = value_set(cfg, roles.ACTIVITY_TYPE)
     vaccination_status = value_set(cfg, roles.VACCINATION_STATUS)
@@ -1848,26 +2682,29 @@ def simulate(n_patients, seed, cfg):
 
     med_rows = expand_visits(rng, visits, 2)
     tables[roles.DRUG_EXPOSURE], med_patient = emit_medication(
-        cfg, rng, visits, med_rows, patients, prescription_actions, activity_types)
+        cfg, rng, visits, med_rows, patients, prescription_actions, activity_types,
+        extras.get(roles.DRUG_EXPOSURE))
 
     prob_rows = expand_visits(rng, visits, 3)
     tables[roles.CONDITION], prob_patient, prob_codes = emit_problem(
-        cfg, rng, visits, prob_rows, patients)
+        cfg, rng, visits, prob_rows, patients, extras.get(roles.CONDITION))
 
     proc_rows = expand_visits(rng, visits, 4)
     tables[roles.INTERVENTION], proc_patient = emit_procedure(
-        cfg, rng, visits, proc_rows, intervention_cat)
+        cfg, rng, visits, proc_rows, intervention_cat, extras.get(roles.INTERVENTION))
 
-    tables[roles.CLINICAL_BACKGROUND], hist_patient = emit_history(
-        cfg, rng, visits, patients, smoking_cat, other_cat)
-    tables[roles.SERVICE_REQUEST], ref_patient = emit_referral(cfg, rng, visits)
+    tables[roles.CLINICAL_BACKGROUND], hist_patient, hist_codes = emit_history(
+        cfg, rng, visits, patients, smoking_cat, extras.get(roles.CLINICAL_BACKGROUND))
+    tables[roles.SERVICE_REQUEST], ref_patient = emit_referral(
+        cfg, rng, visits, extras.get(roles.SERVICE_REQUEST))
     tables[roles.VACCINATION], imm_patient = emit_immunization(
         cfg, rng, visits, vaccination_status)
     tables[roles.INTOLERANCE], allergy_patient, allergy_days = emit_allergy(cfg, rng, visits)
     tables[roles.INTOLERANCE_REACTION] = emit_allergy_reaction(
         cfg, rng, tables[roles.INTOLERANCE], allergy_days)
     tables[roles.CONDITION_CODE] = emit_problem_code(
-        cfg, rng, tables[roles.CONDITION], prob_codes, tables[roles.CLINICAL_BACKGROUND])
+        cfg, rng, tables[roles.CONDITION], prob_codes, tables[roles.CLINICAL_BACKGROUND],
+        hist_codes, extras[roles.CONDITION]["rows"].size if extras else 0)
 
     condition_key = cfg.field(roles.CONDITION, "condition_id")
     index = ConditionIndex(prob_patient, tables[roles.CONDITION][condition_key].to_numpy(),
@@ -1895,7 +2732,12 @@ def simulate(n_patients, seed, cfg):
     def provider_key(role, frame):
         names = [cfg.field(role, r) for r in PRACTITIONER_KEY_ROLES[role]]
         cols = [c for c in names if c in frame.columns]
-        first = frame[cols].bfill(axis=1).iloc[:, 0]
+        # First non-null across a handful of columns. Coalescing column by column
+        # is O(ncols) vectorised passes; bfill(axis=1) instead transposes, which
+        # costs one fill per row and dominates the whole run on large tables.
+        first = frame[cols[0]]
+        for column in cols[1:]:
+            first = first.where(first.notna(), frame[column])
         return frame[org_key].astype("string") + ":" + first.astype("string")
 
     tables[roles.PERSON] = emit_patient(
@@ -1916,8 +2758,11 @@ def simulate(n_patients, seed, cfg):
         "baseline_bmi": patients["bmi0"].to_numpy().round(3),
         "deceased": deceased,
         "has_clinical_records": patients["has_records"].to_numpy(),
+        "care_engagement": patients["engagement"].to_numpy().round(4),
         **{f"cond_{c}": patients["cond_" + c].to_numpy() for c in CONDITIONS},
     })
+    if "lymphedema" in truth:
+        truth["lymphedema"] = truth["lymphedema"].rename(columns={"person_id": person_key})
 
     ordered = {role: tables[role] for role in cfg.table_roles()}
     return ordered, truth
@@ -1928,6 +2773,15 @@ def main():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--n-patients", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=20260801)
+    parser.add_argument("--cohort", choices=[COHORT_CANCER, COHORT_GENERAL],
+                        default=COHORT_CANCER,
+                        help="cancer: every person has a qualifying malignancy and a "
+                             "latent lymphedema state; general: a general panel")
+    parser.add_argument("--start-year", type=int, default=None,
+                        help="first year of the window (default 2020 for the cancer "
+                             "cohort, 2010 for the general one)")
+    parser.add_argument("--end-year", type=int, default=DEFAULT_END_YEAR,
+                        help="last year of the window")
     parser.add_argument("--format", choices=["parquet", "psv"], default="parquet",
                         help="the real delivery format is not yet known")
     parser.add_argument("--out", default=DEFAULT_OUT)
@@ -1940,12 +2794,20 @@ def main():
         cfg = schema_config.SchemaConfig.load(args.config)
     except schema_config.ConfigError as exc:
         raise SystemExit(str(exc)) from None
+    start_year = args.start_year if args.start_year is not None \
+        else DEFAULT_START_YEAR[args.cohort]
+    try:
+        set_window(start_year, args.end_year)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
+
     started = time.time()
-    tables, truth = simulate(args.n_patients, args.seed, cfg)
+    tables, truth = simulate(args.n_patients, args.seed, cfg, args.cohort)
     write_tables(tables, cfg, args.out, args.format)
     truth_dir = write_truth(truth, args.out)
 
-    print(f"\nVNEHR simulation: {args.n_patients} patients, seed {args.seed}, "
+    print(f"\nVNEHR simulation: {args.n_patients} patients, {args.cohort} cohort, "
+          f"{start_year}-{args.end_year}, seed {args.seed}, "
           f"{time.time() - started:.1f}s -> {args.out}")
     print(f"truth tables -> {truth_dir}\n")
     print(f"{'table':20s} {'rows':>10s}  columns")
