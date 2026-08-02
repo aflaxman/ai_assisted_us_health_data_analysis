@@ -73,7 +73,7 @@ proportion with small cells suppressed. **Stop at the first disconfirming result
 rather than completing the full battery — once you know the delivery is
 out of scope, further processing is unnecessary handling of unlicensed data.
 
-1. **Patient count.** Distinct patient identifiers across the delivery. Compare
+1. **Cohort size.** Distinct patient identifiers across the delivery. Compare
    to ~2.9M. Judge on order of magnitude, not precision: a 10–20% difference is
    plausible cohort-definition drift, while a multiple is a different delivery.
 2. **Cancer conformance.** The proportion of patients carrying any malignancy
@@ -116,8 +116,8 @@ notes, which is also where the profiler that computes them lives.
 | Finding | Meaning | Action |
 |---|---|---|
 | All tiers pass | Delivery conforms | Record the result, proceed to Phase 1 |
-| Patient count materially high; non-agreed cancers present in volume | Over-delivery, likely network-wide extract | Stop. Escalate. |
-| Patient count materially low, or agreed sites missing | Under-delivery | Stop. Request re-delivery. |
+| Cohort size materially high; non-agreed cancers present in volume | Over-delivery, likely network-wide extract | Stop. Escalate. |
+| Cohort size materially low, or agreed sites missing | Under-delivery | Stop. Request re-delivery. |
 | Records outside 2020–2025 by creation date | Period over-scope | Stop. Escalate. |
 | Unlicensed record types present | Scope breach | Stop. Escalate. |
 | Deidentification not applied as stated | **Privacy incident** | Stop. Escalate immediately, notify per the breach clause. |

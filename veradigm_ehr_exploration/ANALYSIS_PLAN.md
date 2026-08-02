@@ -43,7 +43,7 @@ substance only.
 1. **The exposure is largely invisible.** Extent of nodal surgery — the dominant
    risk factor, and roughly a fourfold gradient — happens in hospitals and is not
    reliably present in ambulatory records. Radiation is likewise mostly absent.
-2. **Procedure dates in structured history are sparse.** For a disease defined by
+2. **Dates for procedures in structured history are sparse.** For a disease defined by
    its latency after a procedure, the index date is the weakest link. Adjuvant
    endocrine therapy initiation is the most promising surrogate index date for
    breast cancer, and an analogous treatment-initiation anchor should be sought
@@ -106,7 +106,7 @@ suppressed. Expect this to take days, not weeks, and to change the plan.
 5. Size of the treatment-anchored subcohort per site group, versus the
    diagnosis-coded cohort. If the treatment anchor is much larger, it becomes the
    cohort definition.
-6. Practice-mix diagnostics: how concentrated is the cohort across practices, and
+6. Site-mix diagnostics: how concentrated is the cohort across practices, and
    how much between-practice variation is there in each signal's frequency.
    This sizes the clustering problem before it contaminates a result.
 
@@ -165,7 +165,7 @@ The methodological core, and the part that is gated on the Phase 0 answer.
 2. Adjust for observation intensity throughout. Sicker patients visit more and
    therefore accrue more chances to be diagnosed; visit frequency is a confounder
    for every outcome here, not a nuisance.
-3. Practice-level random effects on every geographic result. Practices differ in
+3. Site-level random effects on every geographic result. Practices differ in
    documentation habits far more than their patients differ biologically.
 4. **Treatment equity conditional on diagnosis:** among patients with a
    qualifying lymphedema signal, who goes on to receive therapy referral and
@@ -229,20 +229,26 @@ accident.
 | Hypertension control cascade benchmarked externally | Comingling, and wrong cohort |
 | General-population GLP-1 diffusion | Wrong cohort; may be revivable as a cancer-survivor question |
 | Kidney-function staging and equation-change study | Wrong cohort |
-| Immunization uptake validated against public estimates | Comingling, and wrong cohort |
+| Vaccination uptake validated against public estimates | Comingling, and wrong cohort |
 | Mortality completeness against external life tables | Comingling; internal completeness checks may survive |
 | Area-deprivation linkage at coarse geography | Comingling |
 | Smoking-status extraction validated against a public survey | Extraction is fine; the external validation step is comingling |
-| **Lab-name normalization as a model benchmark** | **Explicitly barred: algorithm development as a deliverable (§1c)** |
+| **Test-name normalization as a model benchmark** | **Explicitly barred: algorithm development as a deliverable (§1c)** |
 
 The last row is the sharpest: it was framed as building a reusable crosswalk and
 reporting model accuracy, which is exactly the deliverable the license prohibits.
 Text normalization as an internal preprocessing step for a publication is a
 different thing, and falls under the same §1c(x) gray area as Phase 2.
 
-## Working notes not in this repo
+## Not in this repo
 
-Detailed feasibility notes, the vendor-specific schema config, the synthetic-data
-generator, and the environment profiler all contain vendor schema detail and are
-gitignored pending refactor. See the compliance status section of the working
-notes for what needs to change before any of it can be committed.
+One file: `config.local.json`, the private schema configuration. It holds the
+delivery's own table and field names, types, documented completeness figures,
+permitted-value lists, and deidentification parameters — everything the license
+bars from a repository as a derivative schema. `extract_schema.py` regenerates it
+from the vendor's data dictionary, which is confidential and also lives outside
+the repo. `config.example.json` documents its structure with placeholder values.
+
+Everything else is committed. Code refers to generic clinical roles defined in
+`roles.py` and resolves them against the private config at runtime, so no
+committed file names a vendor table, column, or permitted value.
