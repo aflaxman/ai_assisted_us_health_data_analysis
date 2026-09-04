@@ -1,0 +1,8 @@
+pandas>=2.0
+pyarrow>=12.0
+matplotlib>=3.7
+statsmodels>=0.14
+scipy>=1.10
+jupyter>=1.0
+ipykernel>=6.0
+nbconvert>=7.0
